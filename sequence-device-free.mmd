@@ -1,0 +1,21 @@
+sequenceDiagram
+    participant D as Device k
+    participant Sim as Simulator
+    participant ДВ as SelectionDispatcher (ДВ)
+    participant B as Buffer (cap. 20)
+
+    D->>Sim: serviceComplete(r)
+    Sim->>Sim: recordServiceEnd(r)
+    Sim->>B: isEmpty()?
+
+    alt buffer is not empty
+        Sim->>ДВ: onDeviceFree(device k)
+        Note right of ДВ: Д2Б5 — find the highest-<br/>priority source with requests<br/>still in the buffer ("packet")
+        ДВ->>B: selectNextRequest()
+        B-->>ДВ: r_next (from top-priority packet)
+        ДВ->>B: remove(r_next)
+        ДВ->>D: device k.startService(r_next)
+        Sim->>Sim: recordServiceStart(r_next)
+    else buffer is empty
+        D->>D: become idle, wait for next arrival
+    end

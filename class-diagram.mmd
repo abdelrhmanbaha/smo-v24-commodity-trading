@@ -1,0 +1,102 @@
+classDiagram
+    direction LR
+
+    class Source {
+        +int id
+        +string name
+        +int priority
+        +float nextArrivalTime
+        +generateNextRequest() Request
+    }
+
+    class Request {
+        +int id
+        +int sourceId
+        +float timeGenerated
+        +float serviceStartTime
+        +float serviceEndTime
+        +RequestStatus status
+    }
+
+    class Buffer {
+        +int capacity
+        +Request[] slots
+        +isFull() bool
+        +isEmpty() bool
+        +placeRequest(Request r) bool
+        +findLowestPriorityRequest() Request
+        +remove(Request r)
+    }
+
+    class PlacementDispatcher {
+        <<ДП>>
+        +onRequestArrival(Request r, Buffer b)
+        -applyRefusalDiscipline(Buffer b) Request
+    }
+
+    class SelectionDispatcher {
+        <<ДВ>>
+        -int devicePointer
+        +selectDevice(Device[] freeDevices) Device
+        +selectNextRequest(Buffer b) Request
+    }
+
+    class Device {
+        +int id
+        +DeviceStatus status
+        +Request currentRequest
+        +startService(Request r)
+        +completeService() Request
+    }
+
+    class Simulator {
+        +float currentTime
+        +Source[] sources
+        +Buffer buffer
+        +PlacementDispatcher dispatcherIn
+        +SelectionDispatcher dispatcherOut
+        +Device[] devices
+        +Statistics stats
+        +run()
+        +step()
+        +onRequestArrival(Request r)
+        +onServiceComplete(Device d)
+    }
+
+    class Statistics {
+        +recordArrival(Request r)
+        +recordServiceStart(Request r)
+        +recordServiceEnd(Request r)
+        +recordRefusal(Request r)
+        +getSummaryTable() SummaryTable
+        +getTimeDiagram() TimeDiagram
+    }
+
+    class RequestStatus {
+        <<enumeration>>
+        WAITING
+        IN_SERVICE
+        SERVED
+        REFUSED
+    }
+
+    class DeviceStatus {
+        <<enumeration>>
+        FREE
+        BUSY
+    }
+
+    Simulator "1" --> "5" Source : owns
+    Simulator "1" --> "1" Buffer : owns
+    Simulator "1" --> "1" PlacementDispatcher : owns
+    Simulator "1" --> "1" SelectionDispatcher : owns
+    Simulator "1" --> "4" Device : owns
+    Simulator "1" --> "1" Statistics : owns
+    Source ..> Request : creates
+    Buffer "1" o-- "0..20" Request : holds
+    PlacementDispatcher ..> Buffer : places into / refuses from
+    SelectionDispatcher ..> Buffer : pulls from
+    SelectionDispatcher ..> Device : assigns to
+    Device ..> Request : processes
+    Request --> RequestStatus
+    Device --> DeviceStatus
