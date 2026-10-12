@@ -1,15 +1,18 @@
-# СМО — Вариант 24. Первичные артефакты (диаграмма классов + диаграммы последовательности)
+# СМО (Queuing System) — Variant 24. Primary Artifacts (Class Diagram + Sequence Diagrams)
 
-Домен: **Commodity Trading and Supply Chain Management Platform**
-Вариант 24: `ИБ · ИЗ2 · ПЗ1 · Д1ОЗ3 · Д1ОО2 · Д2П2 · Д2Б5 · ОР1 · ОД3`
+Domain: **Commodity Trading and Supply Chain Management Platform**
+Variant 24: `ИБ · ИЗ2 · ПЗ1 · Д1ОЗ3 · Д1ОО2 · Д2П2 · Д2Б5 · ОР1 · ОД3`
 
-Эти диаграммы напрямую реализуют бизнес-домен и маппинг, согласованные с преподавателем:
-5 источников (Buyer System, Supplier System, Logistics System, Warehouse/Inventory System,
-Internal Trading System, приоритет = номер источника), буфер на 20 мест, 4 обработчика
-(Worker 1–4), диспетчер постановки заявок **ДП** (Д1ОЗ3 + Д1ОО2) и диспетчер выбора заявок
-**ДВ** (Д2П2 + Д2Б5) — оба являются алгоритмическими компонентами модели, не людьми.
+These diagrams implement the business domain and mapping already approved by the instructor:
+5 sources (Buyer System, Supplier System, Logistics System, Warehouse/Inventory System,
+Internal Trading System — priority = source number), a 20-slot buffer, 4 service devices
+(Worker 1–4), a placement dispatcher **ДП** (disciplines Д1ОЗ3 + Д1ОО2), and a selection
+dispatcher **ДВ** (disciplines Д2П2 + Д2Б5). Both dispatchers are algorithmic components of
+the simulation model, not human roles — the codes (ИБ, ИЗ2, ПЗ1, Д1ОЗ3, Д1ОО2, Д2П2, Д2Б5,
+ОР1, ОД3, ДП, ДВ) are kept exactly as specified by the course, since they're the official
+variant-24 vocabulary and aren't meant to be translated.
 
-## 1. Диаграмма классов
+## 1. Class Diagram
 
 ![class diagram](class-diagram.png)
 
@@ -118,20 +121,20 @@ classDiagram
     Device --> DeviceStatus
 ```
 
-**Почему так:**
-- `Source` — 5 экземпляров одного класса (не 5 подклассов), различаются только `name`/`priority`;
-  `priority` одновременно и есть номер источника, используемый в Д1ОО2 и Д2Б5.
-- `Request` = «Заявка» в финальном согласованном определении: одна целостная торговая/заказная
-  операция от одного источника (не её внутренние шаги).
-- `PlacementDispatcher` (ДП) отвечает только за то, что происходит, когда все приборы заняты —
-  постановка в буфер (Д1ОЗ3) и, при переполнении, отказ (Д1ОО2).
-- `SelectionDispatcher` (ДВ) отвечает за выбор прибора (Д2П2) и выбор заявки из буфера (Д2Б5) —
-  оба метода используются и при немедленном обслуживании (выбор среди нескольких свободных
-  приборов), и при освобождении прибора.
-- `Statistics` отделена от `Simulator`, чтобы одинаково питать и ОР1 (сводная таблица), и ОД3
-  (временные диаграммы/текущее состояние), не дублируя логику подсчёта.
+**Design notes:**
+- `Source` is one class with 5 instances (not 5 subclasses) — they differ only in `name` and
+  `priority`. `priority` doubles as the source number used by Д1ОО2 and Д2Б5.
+- `Request` is the final, agreed definition of "Заявка": one complete trade/order operation
+  from a single source (not its internal steps).
+- `PlacementDispatcher` (ДП) only acts when every device is busy — it owns buffer placement
+  (Д1ОЗ3) and, on overflow, refusal (Д1ОО2).
+- `SelectionDispatcher` (ДВ) owns device selection (Д2П2) and buffer selection (Д2Б5) — both
+  methods are used both for immediate service on arrival (choosing among several free devices)
+  and when a device frees up later.
+- `Statistics` is kept separate from `Simulator` so it can feed both ОР1 (summary table) and
+  ОД3 (time diagrams / live state) without duplicating counting logic.
 
-## 2. Диаграмма последовательности — приход заявки
+## 2. Sequence Diagram — Request Arrival
 
 ![sequence: arrival](sequence-arrival.png)
 
@@ -169,12 +172,12 @@ sequenceDiagram
     end
 ```
 
-Покрывает все три исхода прихода заявки: немедленное обслуживание, постановка в буфер,
-отказ. Важная деталь архитектуры: выбор прибора (Д2П2) — обязанность **ДВ**, а не ДП, даже
-в момент прихода заявки — потому что это выбор прибора, а не постановка в буфер. ДП
-подключается только когда свободных приборов нет.
+Covers all three possible outcomes of a request arriving: immediate service, buffering,
+refusal. Key architectural point: device selection (Д2П2) is **ДВ**'s job, not ДП's, even at
+the moment of arrival — because it's a device-selection decision, not a buffering decision.
+ДП only gets involved once no device is free.
 
-## 3. Диаграмма последовательности — освобождение прибора
+## 3. Sequence Diagram — Device Becomes Free
 
 ![sequence: device free](sequence-device-free.png)
 
@@ -202,11 +205,12 @@ sequenceDiagram
     end
 ```
 
-## Источники (source files)
+## Source Files
 
 - `class-diagram.mmd` / `.png`
 - `sequence-arrival.mmd` / `.png`
 - `sequence-device-free.mmd` / `.png`
 
-GitHub рендерит блоки ```mermaid``` в этом файле автоматически — отдельно открывать `.png`
-не обязательно, но они приложены на случай локального просмотра или вставки в отчёт.
+GitHub renders the ```mermaid``` code blocks in this file automatically — you don't need to
+open the `.png` files separately, but they're included for offline viewing or pasting into
+a report.
