@@ -204,13 +204,3 @@ sequenceDiagram
         D->>D: become idle, wait for next arrival
     end
 ```
-
-## Source Files
-
-- `class-diagram.mmd` / `.png`
-- `sequence-arrival.mmd` / `.png`
-- `sequence-device-free.mmd` / `.png`
-
-GitHub renders the ```mermaid``` code blocks in this file automatically — you don't need to
-open the `.png` files separately, but they're included for offline viewing or pasting into
-a report.
