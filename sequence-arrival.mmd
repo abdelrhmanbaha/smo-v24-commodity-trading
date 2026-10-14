@@ -8,15 +8,22 @@ sequenceDiagram
 
     S->>Sim: generate Request r (time Tвх)
     Sim->>D: any device free?
+    D-->>Sim: freeDevices (possibly empty)
+    Sim->>ДВ: isBatchActive()?
+    ДВ-->>Sim: true / false
 
-    alt at least one device is free
+    alt a device is free AND no batch is currently active
         Sim->>ДВ: selectDevice(freeDevices)
         Note right of ДВ: Д2П2 — round-robin:<br/>scan from pointer, pick<br/>first free device
+        ДВ->>ДВ: advancePointer()
         ДВ-->>Sim: device k
         Sim->>D: device k.startService(r)
-    else all 4 devices busy
+        Note right of D: service duration ~ Exp(λ),<br/>per ПЗ1
+    else all devices busy, OR a batch is currently active
+        Note over Sim,ДП: a free device here must keep<br/>serving the active batch (Д2Б5) —<br/>it may NOT take r directly
         Sim->>ДП: onRequestArrival(r)
         ДП->>B: isFull()?
+        B-->>ДП: true / false
         alt buffer has a free slot
             Note right of ДП: Д1ОЗ3 — first free slot<br/>from the start, no shifting
             ДП->>B: placeRequest(r)

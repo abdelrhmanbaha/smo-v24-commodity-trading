@@ -1,0 +1,98 @@
+flowchart LR
+
+    subgraph SRC["Source i"]
+        direction TB
+        A1(["Generate Request r<br/>at interval ИЗ2<br/>(uniform distribution)"])
+    end
+
+    subgraph SIM["Simulator"]
+        direction TB
+        B1{"Any device<br/>free right now?"}
+        B1b{"ДВ.isBatchActive()?"}
+        B2(["Device k reports<br/>serviceComplete(r)"])
+    end
+
+    subgraph DV["Selection Dispatcher (ДВ)"]
+        direction TB
+        C1["selectDevice(freeDevices)<br/>Д2П2 — round-robin:<br/>scan from pointer,<br/>pick first free device"]
+        C2["advancePointer()"]
+        C0{"device k was serving<br/>a batch request?"}
+        C0b["batchDevices.remove(device k)"]
+        C3{"currentBatch has<br/>unassigned requests?"}
+        C3b{"batchDevices still has<br/>other devices working<br/>on this batch?"}
+        C4["highestPrioritySourcePresent()"]
+        C5{"Buffer has at least<br/>one waiting request?"}
+        C6["Д2Б5 — freeze a NEW batch:<br/>removeAllFromSource(sourceId).<br/>Later arrivals from this source<br/>do NOT join this batch."]
+        C7["take next request<br/>from currentBatch"]
+        C7b["batchDevices.add(device k)"]
+        C8["advancePointer()"]
+    end
+
+    subgraph DP["Placement Dispatcher (ДП)"]
+        direction TB
+        D1["onRequestArrival(r)"]
+        D2{"Buffer isFull()?"}
+        D3["Д1ОЗ3 — placeRequest(r)<br/>in first free slot,<br/>no shifting"]
+        D4["Д1ОО2 — findLowestPriorityRequest()"]
+        D5["remove(r_old),<br/>recordRefusal(r_old)"]
+        D6["placeRequest(r)"]
+    end
+
+    subgraph BUF["Buffer (capacity 20)"]
+        direction TB
+        E1[("buffered requests,<br/>grouped by source")]
+    end
+
+    subgraph DEV["Worker(s) / Device"]
+        direction TB
+        F1["Device k: startService(r)"]
+        F2(["Device k: BUSY,<br/>serving request<br/>(duration ~ Exp(λ), ПЗ1)"])
+        F3["Device k: completeService()"]
+        F4(["Device k: idle —<br/>nothing left to batch,<br/>wait for next arrival"])
+        F5(["Device k: idle —<br/>batch still in progress<br/>on other devices"])
+    end
+
+    %% --- Arrival path ---
+    A1 -- "triggers" --> B1
+    B1 -- "yes, a device is free" --> B1b
+    B1 -- "no, all 4 busy" --> D1
+    B1b -- "no batch active —<br/>direct assignment" --> C1
+    B1b -- "yes, batch active —<br/>device must keep<br/>serving the batch" --> D1
+    C1 --> C2
+    C2 -- "device k assigned" --> F1
+
+    D1 --> D2
+    D2 -- "free slot available" --> D3
+    D3 --> E1
+    D2 -- "all 20 slots full" --> D4
+    D4 --> D5
+    D5 --> D6
+    D6 --> E1
+
+    %% --- Service path ---
+    F1 --> F2
+    F2 -- "service time elapses" --> F3
+    F3 -- "triggers" --> B2
+    B2 --> C0
+
+    %% --- Device-free / Д2Б5 lifecycle ---
+    C0 -- "yes" --> C0b
+    C0b --> C3
+    C0 -- "no" --> C3
+
+    C3 -- "yes" --> C7
+    C3 -- "no" --> C3b
+
+    C3b -- "yes — batch not<br/>fully processed yet" --> F5
+    C3b -- "no — batch fully<br/>processed, or none active" --> C4
+
+    C4 -. "reads" .-> E1
+    C4 --> C5
+    C5 -- "yes" --> C6
+    C6 -. "pulls all of that<br/>source's requests" .-> E1
+    C6 --> C7
+    C5 -- "no, buffer empty" --> F4
+
+    C7 --> C7b
+    C7b --> C8
+    C8 -- "device k reused" --> F1

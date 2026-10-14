@@ -2,61 +2,76 @@ classDiagram
     direction LR
 
     class Source {
-        +int id
-        +string name
-        +int priority
-        +float nextArrivalTime
+        -int id
+        -string name
+        -int priority
+        -float nextArrivalTime
         +generateNextRequest() Request
+        +getPriority() int
     }
 
     class Request {
-        +int id
-        +int sourceId
-        +float timeGenerated
-        +float serviceStartTime
-        +float serviceEndTime
-        +RequestStatus status
+        -int id
+        -int sourceId
+        -float timeGenerated
+        -float serviceStartTime
+        -float serviceEndTime
+        -RequestStatus status
+        +getSourceId() int
+        +setStatus(RequestStatus s)
     }
 
     class Buffer {
-        +int capacity
-        +Request[] slots
+        -int capacity
+        -Request[] slots
         +isFull() bool
         +isEmpty() bool
         +placeRequest(Request r) bool
         +findLowestPriorityRequest() Request
         +remove(Request r)
+        +removeAllFromSource(int sourceId) Request[]
+        +highestPrioritySourcePresent() int
     }
 
     class PlacementDispatcher {
         <<ДП>>
-        +onRequestArrival(Request r, Buffer b)
-        -applyRefusalDiscipline(Buffer b) Request
+        -Buffer buffer
+        +onRequestArrival(Request r)
+        -applyRefusalDiscipline() Request
     }
 
     class SelectionDispatcher {
         <<ДВ>>
+        -Buffer buffer
         -int devicePointer
-        +selectDevice(Device[] freeDevices) Device
-        +selectNextRequest(Buffer b) Request
+        -Request[] currentBatch
+        -int currentBatchSourceId
+        -Device[] batchDevices
+        +isBatchActive() bool
+        +onDeviceFree(Device d, Request completed)
+        -selectDevice(Device[] freeDevices) Device
+        -formNewBatch()
+        -assignFromBatch(Device d)
+        -advancePointer()
     }
 
     class Device {
-        +int id
-        +DeviceStatus status
-        +Request currentRequest
+        -int id
+        -DeviceStatus status
+        -Request currentRequest
         +startService(Request r)
         +completeService() Request
+        +isFree() bool
     }
 
     class Simulator {
-        +float currentTime
-        +Source[] sources
-        +Buffer buffer
-        +PlacementDispatcher dispatcherIn
-        +SelectionDispatcher dispatcherOut
-        +Device[] devices
-        +Statistics stats
+        -float currentTime
+        -Source[] sources
+        -Buffer buffer
+        -PlacementDispatcher dispatcherIn
+        -SelectionDispatcher dispatcherOut
+        -Device[] devices
+        -Statistics stats
         +run()
         +step()
         +onRequestArrival(Request r)
@@ -64,6 +79,9 @@ classDiagram
     }
 
     class Statistics {
+        -int generatedCount
+        -int servedCount
+        -int refusedCount
         +recordArrival(Request r)
         +recordServiceStart(Request r)
         +recordServiceEnd(Request r)
@@ -94,8 +112,10 @@ classDiagram
     Simulator "1" --> "1" Statistics : owns
     Source ..> Request : creates
     Buffer "1" o-- "0..20" Request : holds
-    PlacementDispatcher ..> Buffer : places into / refuses from
-    SelectionDispatcher ..> Buffer : pulls from
+    PlacementDispatcher "1" --> "1" Buffer : buffer (private ref.)
+    SelectionDispatcher "1" --> "1" Buffer : buffer (private ref.)
+    SelectionDispatcher "1" o-- "0..*" Request : currentBatch (unassigned)
+    SelectionDispatcher "1" o-- "0..4" Device : batchDevices (in service)
     SelectionDispatcher ..> Device : assigns to
     Device ..> Request : processes
     Request --> RequestStatus

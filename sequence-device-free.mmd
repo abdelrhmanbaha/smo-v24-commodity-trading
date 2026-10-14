@@ -6,16 +6,45 @@ sequenceDiagram
 
     D->>Sim: serviceComplete(r)
     Sim->>Sim: recordServiceEnd(r)
-    Sim->>B: isEmpty()?
+    Sim->>ДВ: onDeviceFree(device k, r)
 
-    alt buffer is not empty
-        Sim->>ДВ: onDeviceFree(device k)
-        Note right of ДВ: Д2Б5 — find the highest-<br/>priority source with requests<br/>still in the buffer ("packet")
-        ДВ->>B: selectNextRequest()
-        B-->>ДВ: r_next (from top-priority packet)
-        ДВ->>B: remove(r_next)
+    alt device k was serving a batch request
+        ДВ->>ДВ: batchDevices.remove(device k)
+    else device k was serving a direct (non-batch) request
+        Note right of ДВ: no batch bookkeeping to update
+    end
+
+    alt currentBatch still has unassigned requests
+        Note right of ДВ: Д2Б5 — the active batch isn't<br/>finished yet, device k simply<br/>takes the next unassigned member
+        ДВ->>ДВ: take next request r_next from currentBatch
+        ДВ->>ДВ: batchDevices.add(device k)
+        Note right of ДВ: these 2 steps execute atomically,<br/>inside this one onDeviceFree() call —<br/>isBatchActive() can never observe<br/>currentBatch and batchDevices both<br/>empty in between them
+        Note right of ДВ: Д2П2 — device k is the free<br/>device being used, advance the<br/>round-robin pointer past it
+        ДВ->>ДВ: advancePointer()
         ДВ->>D: device k.startService(r_next)
+        Note right of D: service duration ~ Exp(λ),<br/>per ПЗ1
         Sim->>Sim: recordServiceStart(r_next)
-    else buffer is empty
-        D->>D: become idle, wait for next arrival
+    else currentBatch empty, but batchDevices still has other devices working
+        Note right of ДВ: the professor's rule: the NEXT<br/>batch cannot form until EVERY<br/>member of THIS batch has<br/>completed. Device k waits.
+        D->>D: become idle, wait for next trigger
+    else currentBatch AND batchDevices are both empty (batch fully processed, or none was active)
+        ДВ->>B: highestPrioritySourcePresent()
+        alt buffer has at least one waiting request
+            B-->>ДВ: sourceId (highest priority present)
+            Note right of ДВ: Д2Б5 — freeze a NEW batch:<br/>pull ALL requests currently in<br/>the buffer from this source.<br/>Requests from this source that<br/>arrive AFTER this point do NOT<br/>join the batch — they wait for<br/>the next one.
+            ДВ->>B: removeAllFromSource(sourceId)
+            B-->>ДВ: currentBatch = [r1, r2, ...]
+            ДВ->>ДВ: take next request r_next from currentBatch
+            ДВ->>ДВ: batchDevices.add(device k)
+            Note right of ДВ: these 2 steps execute atomically,<br/>inside this one onDeviceFree() call —<br/>the freshly-formed batch is never<br/>observably "empty" before device k<br/>is registered as serving it
+            Note right of ДВ: Д2П2 — advance the round-robin<br/>pointer past device k
+            ДВ->>ДВ: advancePointer()
+            ДВ->>D: device k.startService(r_next)
+            Note right of D: service duration ~ Exp(λ),<br/>per ПЗ1
+            Sim->>Sim: recordServiceStart(r_next)
+        else buffer is empty
+            B-->>ДВ: none
+            Note right of ДВ: nothing to batch — stay idle
+            D->>D: become idle, wait for next arrival
+        end
     end

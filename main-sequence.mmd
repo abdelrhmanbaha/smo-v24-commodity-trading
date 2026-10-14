@@ -1,0 +1,82 @@
+sequenceDiagram
+    participant S as Source i
+    participant Sim as Simulator
+    participant ДВ as SelectionDispatcher (ДВ)
+    participant ДП as PlacementDispatcher (ДП)
+    participant D as Devices[1..4]
+    participant B as Buffer (cap. 20)
+
+    loop every inter-arrival interval (ИЗ2 — uniform distribution)
+        S->>Sim: generate Request r (time Tвх)
+        Sim->>D: any device free?
+        D-->>Sim: freeDevices (possibly empty)
+        Sim->>ДВ: isBatchActive()?
+        ДВ-->>Sim: true / false
+
+        alt a device is free AND no batch is currently active
+            Sim->>ДВ: selectDevice(freeDevices)
+            Note right of ДВ: Д2П2 — round-robin:<br/>scan from pointer, pick<br/>first free device
+            ДВ->>ДВ: advancePointer()
+            ДВ-->>Sim: device k
+            Sim->>D: device k.startService(r)
+            Note right of D: service duration ~ Exp(λ),<br/>per ПЗ1
+        else all devices busy, OR a batch is currently active
+            Note over Sim,ДП: a free device here must keep<br/>serving the active batch (Д2Б5) —<br/>it may NOT take r directly
+            Sim->>ДП: onRequestArrival(r)
+            ДП->>B: isFull()?
+            B-->>ДП: true / false
+            alt buffer has a free slot
+                Note right of ДП: Д1ОЗ3 — first free slot<br/>from the start, no shifting
+                ДП->>B: placeRequest(r)
+            else buffer full (all 20 slots)
+                Note right of ДП: Д1ОО2 — evict the buffered<br/>request whose source has<br/>the lowest priority
+                ДП->>B: findLowestPriorityRequest()
+                B-->>ДП: r_old (lowest-priority)
+                ДП->>B: remove(r_old)
+                ДП->>Sim: recordRefusal(r_old)
+                ДП->>B: placeRequest(r)
+                Note over B: r now waits in the buffer
+            end
+        end
+    end
+
+    Note over D,B: ... simulated time passes, eventually<br/>a device finishes the request it was serving ...
+
+    D->>Sim: serviceComplete(r_prev)
+    Sim->>Sim: recordServiceEnd(r_prev)
+    Sim->>ДВ: onDeviceFree(device k, r_prev)
+
+    alt device k was serving a batch request
+        ДВ->>ДВ: batchDevices.remove(device k)
+    else device k was serving a direct (non-batch) request
+        Note right of ДВ: no batch bookkeeping to update
+    end
+
+    alt currentBatch still has unassigned requests
+        Note right of ДВ: Д2Б5 — the active batch isn't<br/>finished yet, device k takes the<br/>next unassigned member
+        ДВ->>ДВ: take next request from currentBatch
+        ДВ->>ДВ: batchDevices.add(device k)
+        Note right of ДВ: these 2 steps execute atomically,<br/>inside this one onDeviceFree() call —<br/>isBatchActive() can never observe<br/>currentBatch and batchDevices both<br/>empty in between them
+        ДВ->>ДВ: advancePointer()
+        ДВ->>D: device k.startService(r)
+        Note right of D: service duration ~ Exp(λ),<br/>per ПЗ1
+        Sim->>Sim: recordServiceStart(r)
+    else currentBatch empty, but batchDevices still has other devices working
+        Note right of ДВ: the professor's rule: the NEXT<br/>batch cannot form until EVERY<br/>member of THIS batch has<br/>completed. Device k waits.
+        D->>D: become idle, wait for next trigger
+    else currentBatch AND batchDevices are both empty (batch fully processed)
+        ДВ->>B: highestPrioritySourcePresent()
+        B-->>ДВ: sourceId i (now the highest-priority<br/>source still waiting — e.g. r's source)
+        Note right of ДВ: Д2Б5 — freeze a NEW batch:<br/>pull ALL of source i's requests<br/>currently in the buffer at once<br/>(including r). Requests from<br/>source i that arrive after this<br/>point do NOT join this batch.
+        ДВ->>B: removeAllFromSource(sourceId)
+        B-->>ДВ: currentBatch = [..., r, ...]
+        ДВ->>ДВ: take next request from currentBatch
+        ДВ->>ДВ: batchDevices.add(device k)
+        Note right of ДВ: these 2 steps execute atomically,<br/>inside this one onDeviceFree() call —<br/>the freshly-formed batch is never<br/>observably "empty" before device k<br/>is registered as serving it
+        ДВ->>ДВ: advancePointer()
+        ДВ->>D: device k.startService(r)
+        Note right of D: service duration ~ Exp(λ),<br/>per ПЗ1
+        Sim->>Sim: recordServiceStart(r)
+    end
+
+    Note over Sim,D: Request r has now been generated,<br/>survived an eviction round in the<br/>buffer, waited for the prior batch<br/>to fully clear, and been placed<br/>into service — its full lifecycle.
