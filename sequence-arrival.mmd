@@ -6,33 +6,40 @@ sequenceDiagram
     participant D as Devices[1..4]
     participant B as Buffer (cap. 20)
 
-    S->>Sim: generate Request r (time Tвх)
-    Sim->>D: any device free?
-    D-->>Sim: freeDevices (possibly empty)
-    Sim->>ДВ: isBatchActive()?
-    ДВ-->>Sim: true / false
+    S->>Sim: generate Request r (time Tвх, interval ИЗ2)
+    Sim->>Sim: recordArrival(r)
+    Sim->>ДВ: tryServeDirectly(r)
+    ДВ->>ДВ: isBatchActive()
+    ДВ-->>ДВ: true / false
+    opt no batch is active
+        ДВ->>D: scan from pointer: isFree()?
+        D-->>ДВ: first free device k, or none
+    end
 
-    alt a device is free AND no batch is currently active
-        Sim->>ДВ: selectDevice(freeDevices)
-        Note right of ДВ: Д2П2 — round-robin:<br/>scan from pointer, pick<br/>first free device
-        ДВ->>ДВ: advancePointer()
-        ДВ-->>Sim: device k
-        Sim->>D: device k.startService(r)
+    alt no batch active AND a free device k was found
+        Note right of ДВ: Д2П2 — round-robin: first free<br/>device scanning from the pointer
+        ДВ->>ДВ: advancePointer() past k
+        ДВ->>D: k.startService(r)
         Note right of D: service duration ~ Exp(λ),<br/>per ПЗ1
-    else all devices busy, OR a batch is currently active
-        Note over Sim,ДП: a free device here must keep<br/>serving the active batch (Д2Б5) —<br/>it may NOT take r directly
+        ДВ-->>Sim: true (served directly)
+        Sim->>Sim: recordServiceStart(r)
+    else a batch is active, OR all 4 devices are busy
+        ДВ-->>Sim: false
+        Note over Sim,ДВ: r may NOT bypass an active batch.<br/>Invariant I — while currentBatch has<br/>unassigned members, no device is idle,<br/>so there is nothing to dispatch here.
         Sim->>ДП: onRequestArrival(r)
         ДП->>B: isFull()?
         B-->>ДП: true / false
         alt buffer has a free slot
             Note right of ДП: Д1ОЗ3 — first free slot<br/>from the start, no shifting
             ДП->>B: placeRequest(r)
+            ДП-->>Sim: null (nothing refused)
         else buffer full (all 20 slots)
-            Note right of ДП: Д1ОО2 — refuse the request<br/>whose source has lowest priority
+            Note right of ДП: Д1ОО2 — refuse the buffered<br/>request whose source has<br/>the lowest priority
             ДП->>B: findLowestPriorityRequest()
             B-->>ДП: r_old (lowest-priority)
             ДП->>B: remove(r_old)
-            ДП->>Sim: recordRefusal(r_old)
             ДП->>B: placeRequest(r)
+            ДП-->>Sim: r_old (refused)
+            Sim->>Sim: recordRefusal(r_old)
         end
     end

@@ -36,22 +36,24 @@ classDiagram
     class PlacementDispatcher {
         <<ДП>>
         -Buffer buffer
-        +onRequestArrival(Request r)
+        +onRequestArrival(Request r) Request
         -applyRefusalDiscipline() Request
     }
 
     class SelectionDispatcher {
         <<ДВ>>
         -Buffer buffer
+        -Device[] devices
         -int devicePointer
         -Request[] currentBatch
         -int currentBatchSourceId
         -Device[] batchDevices
-        +isBatchActive() bool
-        +onDeviceFree(Device d, Request completed)
-        -selectDevice(Device[] freeDevices) Device
+        +tryServeDirectly(Request r) bool
+        +onDeviceFree(Device d) Request[]
+        -isBatchActive() bool
         -formNewBatch()
-        -assignFromBatch(Device d)
+        -dispatchBatch() Request[]
+        -selectFreeDevice() Device
         -advancePointer()
     }
 
@@ -114,9 +116,9 @@ classDiagram
     Buffer "1" o-- "0..20" Request : holds
     PlacementDispatcher "1" --> "1" Buffer : buffer (private ref.)
     SelectionDispatcher "1" --> "1" Buffer : buffer (private ref.)
+    SelectionDispatcher "1" --> "4" Device : devices (private ref., Д2П2)
     SelectionDispatcher "1" o-- "0..*" Request : currentBatch (unassigned)
     SelectionDispatcher "1" o-- "0..4" Device : batchDevices (in service)
-    SelectionDispatcher ..> Device : assigns to
     Device ..> Request : processes
     Request --> RequestStatus
     Device --> DeviceStatus
