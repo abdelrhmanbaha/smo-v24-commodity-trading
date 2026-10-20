@@ -88,4 +88,4 @@ sequenceDiagram
     ДВ-->>Sim: requests started (possibly none)
     Sim->>Sim: recordServiceStart(each started request)
 
-    Note over Sim,D: Request r is served once a batch is formed<br/>from its source — this happens only when its<br/>source is the highest-priority one in the buffer<br/>and the previous batch has fully finished.
+    Note over Sim,D: If request r is buffered, it is served when a batch<br/>containing it is formed. This happens only when its<br/>source has the highest priority among sources in the<br/>buffer and the previous batch has fully finished.
