@@ -61,10 +61,10 @@ sequenceDiagram
     alt currentBatch AND batchDevices both empty (batch fully processed, or none active)
         ДВ->>B: highestPrioritySourcePresent()
         B-->>ДВ: sourceId, or none if buffer empty
-        opt buffer had a waiting request (here: source i of r)
-            Note right of ДВ: Д2Б5 — freeze a NEW batch:<br/>pull ALL of source i's requests<br/>currently in the buffer (incl. r).<br/>Requests from source i that arrive<br/>after this point do NOT join it.
-            ДВ->>B: removeAllFromSource(i)
-            B-->>ДВ: currentBatch = [..., r, ...]
+        opt buffer had a waiting request
+            Note right of ДВ: Д2Б5 — freeze a NEW batch: pull ALL<br/>buffered requests of the highest-priority<br/>source present (sourceId). r joins this<br/>batch only if sourceId is r's own source,<br/>otherwise r keeps waiting for a later<br/>batch. Requests from sourceId that arrive<br/>after this point do NOT join it.
+            ДВ->>B: removeAllFromSource(sourceId)
+            B-->>ДВ: currentBatch = [...]
         end
     else currentBatch empty, but batchDevices not empty
         Note right of ДВ: the active batch is still being<br/>processed on other devices —<br/>the NEXT batch may not form yet.<br/>dispatchBatch() will find nothing.
@@ -85,7 +85,7 @@ sequenceDiagram
         Note right of D: service duration ~ Exp(λ),<br/>per ПЗ1
     end
     Note right of ДВ: every device still free here stays<br/>idle — either no batch member is<br/>left, or the buffer was empty
-    ДВ-->>Sim: requests started [..., r, ...]
+    ДВ-->>Sim: requests started (possibly none)
     Sim->>Sim: recordServiceStart(each started request)
 
-    Note over Sim,D: Request r has been generated, buffered<br/>(surviving an eviction round), frozen into<br/>a batch only after the previous batch fully<br/>finished, and dispatched to a free device.
+    Note over Sim,D: Request r is served once a batch is formed<br/>from its source — this happens only when its<br/>source is the highest-priority one in the buffer<br/>and the previous batch has fully finished.
