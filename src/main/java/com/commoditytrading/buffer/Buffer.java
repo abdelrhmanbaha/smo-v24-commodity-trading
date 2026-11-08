@@ -111,7 +111,20 @@ public final class Buffer {
         }
         return result;
     }
-
+    /**
+     * Removes and returns all requests of one source, in slot order. Д2Б5 uses this to form a
+     * packet: at that moment the packet's members leave the buffer and their slots become free.
+     */
+    public List<Request> removeAllFromSource(int sourceId) {
+        List<Request> removed = new ArrayList<>();
+        for (int i = 0; i < slots.length; i++) {
+            if (slots[i] != null && slots[i].getSourceId() == sourceId) {
+                removed.add(slots[i]);
+                slots[i] = null;
+            }
+        }
+        return removed;
+    }
     public boolean contains(Request request) {
         for (Request r : slots) {
             if (r == request) {

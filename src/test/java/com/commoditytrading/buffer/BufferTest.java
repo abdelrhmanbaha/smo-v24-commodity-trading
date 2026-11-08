@@ -131,7 +131,24 @@ class BufferTest {
         assertEquals(List.of(a, c), buffer.requestsFromSource(2));
         assertEquals(3, buffer.size());
     }
+    @Test
+    void removeAllFromSourceTakesThatSourcesRequestsAndFreesTheirSlots() {
+        Buffer buffer = new Buffer(5);
+        Request a = new Request(2, 1, 0.0);
+        Request b = new Request(1, 1, 0.1);
+        Request c = new Request(2, 2, 0.2);
+        buffer.placeRequest(a);
+        buffer.placeRequest(b);
+        buffer.placeRequest(c);
 
+        List<Request> removed = buffer.removeAllFromSource(2);
+
+        assertEquals(List.of(a, c), removed);
+        assertEquals(1, buffer.size());
+        assertSame(b, buffer.snapshot().get(1));      // b did not move (Д1ОЗ3)
+        assertNull(buffer.snapshot().get(0));
+        assertTrue(buffer.removeAllFromSource(4).isEmpty());
+    }
     @Test
     void removingAnAbsentRequestFails() {
         Buffer buffer = new Buffer(2);
