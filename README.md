@@ -15,24 +15,24 @@ model, not human roles. Discipline codes are written in their standard notation.
 
 | File | Description |
 |---|---|
-| `hegazy_V24_BusinessDomain.pdf` | Stage 1 — business domain description |
-| `hegazy_V24_mapping.pdf` | Stage 1 — mapping of the domain onto the СМО model |
-| `class-diagram.mmd` / `.png` | Class diagram |
-| `main-sequence.mmd` / `.png` | Main sequence diagram — full request lifecycle |
-| `sequence-arrival.mmd` / `.png` | Sequence diagram — request arrival |
-| `sequence-device-free.mmd` / `.png` | Sequence diagram — device becomes free |
-| `flowchart-swimlanes.mmd` / `.png` | Flowchart with swimlanes |
+| `docs/stage1/hegazy_V24_BusinessDomain.pdf` | Stage 1 — business domain description |
+| `docs/stage1/hegazy_V24_mapping.pdf` | Stage 1 — mapping of the domain onto the СМО model |
+| `docs/diagrams/class-diagram.mmd` / `.png` | Class diagram |
+| `docs/diagrams/main-sequence.mmd` / `.png` | Main sequence diagram — full request lifecycle |
+| `docs/diagrams/sequence-arrival.mmd` / `.png` | Sequence diagram — request arrival |
+| `docs/diagrams/sequence-device-free.mmd` / `.png` | Sequence diagram — device becomes free |
+| `docs/diagrams/flowchart-swimlanes.mmd` / `.png` | Flowchart with swimlanes |
 
 ## 0. Stage 1 — Business Domain & Mapping
 
-- [hegazy_V24_BusinessDomain.pdf](hegazy_V24_BusinessDomain.pdf)
-- [hegazy_V24_mapping.pdf](hegazy_V24_mapping.pdf)
+- [hegazy_V24_BusinessDomain.pdf](docs/stage1/hegazy_V24_BusinessDomain.pdf)
+- [hegazy_V24_mapping.pdf](docs/stage1/hegazy_V24_mapping.pdf)
 
 ## 1. Class Diagram
 
-![class diagram](class-diagram.png)
+![class diagram](docs/diagrams/class-diagram.png)
 
-Mermaid source: [`class-diagram.mmd`](class-diagram.mmd)
+Mermaid source: [`class-diagram.mmd`](docs/diagrams/class-diagram.mmd)
 
 **Design notes:**
 - `Source` is one class with 5 instances (not 5 subclasses) — they differ only in `name` and
@@ -70,9 +70,9 @@ service, buffering, refusal, and the batch-aware device-free path) in a single f
 query whose answer decides a branch (`isFree()`, `isFull()`, `highestPrioritySourcePresent()`,
 `tryServeDirectly()`, `onRequestArrival()`) shows its return message before the branch.
 
-![main sequence diagram](main-sequence.png)
+![main sequence diagram](docs/diagrams/main-sequence.png)
 
-Mermaid source: [`main-sequence.mmd`](main-sequence.mmd)
+Mermaid source: [`main-sequence.mmd`](docs/diagrams/main-sequence.mmd)
 
 ### Д2Б5 — Batch Discipline
 
@@ -123,15 +123,15 @@ section 2.
 
 ### 3.1 Request Arrival
 
-![sequence: arrival](sequence-arrival.png)
+![sequence: arrival](docs/diagrams/sequence-arrival.png)
 
-Mermaid source: [`sequence-arrival.mmd`](sequence-arrival.mmd)
+Mermaid source: [`sequence-arrival.mmd`](docs/diagrams/sequence-arrival.mmd)
 
 ### 3.2 Device Becomes Free
 
-![sequence: device free](sequence-device-free.png)
+![sequence: device free](docs/diagrams/sequence-device-free.png)
 
-Mermaid source: [`sequence-device-free.mmd`](sequence-device-free.mmd)
+Mermaid source: [`sequence-device-free.mmd`](docs/diagrams/sequence-device-free.mmd)
 
 ## 4. Flowchart with Swimlanes
 
@@ -141,9 +141,9 @@ processing, buffering, refusal, and the full Д2Б5 lifecycle — including the 
 loop that hands batch members to every free device, and the rule that the next batch cannot
 form while any device is still serving a member of the current one.
 
-![flowchart with swimlanes](flowchart-swimlanes.png)
+![flowchart with swimlanes](docs/diagrams/flowchart-swimlanes.png)
 
-Mermaid source: [`flowchart-swimlanes.mmd`](flowchart-swimlanes.mmd)
+Mermaid source: [`flowchart-swimlanes.mmd`](docs/diagrams/flowchart-swimlanes.mmd)
 
 ## 5. How the Artifacts Fit Together
 
