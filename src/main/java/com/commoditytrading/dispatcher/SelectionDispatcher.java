@@ -45,7 +45,7 @@ public final class SelectionDispatcher {
     private final Deque<Request> currentBatch = new ArrayDeque<>();
     private int currentBatchSourceId;
     private final Set<Device> batchDevices = new LinkedHashSet<>();
-
+    private int formedBatchCount;
     /**
      * @param buffer  the buffer shared with the placement dispatcher
      * @param devices the devices in pointer order (device 1 first)
@@ -122,6 +122,7 @@ public final class SelectionDispatcher {
         members.sort(Comparator.comparingDouble(Request::getGenerationTime));
         currentBatch.addAll(members);
         currentBatchSourceId = source.getAsInt();
+        formedBatchCount++;
     }
 
     /**
@@ -169,6 +170,10 @@ public final class SelectionDispatcher {
     /** Source of the active packet, or empty if no packet is active (for step mode). */
     public OptionalInt getActiveBatchSourceId() {
         return isBatchActive() ? OptionalInt.of(currentBatchSourceId) : OptionalInt.empty();
+    }
+    /** How many packets have been formed since the start (lets the simulator report a new one). */
+    public int getFormedBatchCount() {
+        return formedBatchCount;
     }
 
     /** Packet members not yet handed to a device, in service order (read-only copy, for step mode). */
