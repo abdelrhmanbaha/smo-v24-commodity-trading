@@ -22,6 +22,64 @@ model, not human roles. Discipline codes are written in their standard notation.
 | `docs/diagrams/sequence-arrival.mmd` / `.png` | Sequence diagram — request arrival |
 | `docs/diagrams/sequence-device-free.mmd` / `.png` | Sequence diagram — device becomes free |
 | `docs/diagrams/flowchart-swimlanes.mmd` / `.png` | Flowchart with swimlanes |
+| `pom.xml` | Maven build file (Java 21, JUnit 5) |
+| `src/main/java` / `src/test/java` | Simulator source code / unit tests |
+
+## Variant 24 Decoded
+
+| Code | Meaning |
+|---|---|
+| ИБ | Infinite source: a source never runs out of requests |
+| ИЗ2 | Uniform interval between two requests of one source: τ = a + (b − a)·U |
+| ПЗ1 | Exponential service time: τ = −ln(1 − U) / λ |
+| Д1ОЗ3 | Buffer placement: the request takes the first free slot; slots are never shifted |
+| Д1ОО2 | Refusal: if the buffer is full, the request with the lowest priority (largest source number; among equals, the newest) is evicted and the new request takes its slot |
+| Д2П2 | Device selection: round-robin; the search starts at the device after the last one chosen |
+| Д2Б5 | Buffer selection by packets: the buffered requests of the highest-priority source form a packet, served oldest first; the next packet forms only after this one is fully served |
+| ОР1 | Results as summary tables (automatic mode) |
+| ОД3 | Dynamic display: step mode with the event calendar, buffer state and current results |
+
+## Running the Simulator
+
+Requirements: JDK 21 or newer and Maven 3.9+ (IntelliJ IDEA has Maven built in).
+
+| Action | Command |
+|---|---|
+| Run all unit tests | `mvn test` |
+| Build | `mvn package` |
+| Start step mode | `java -Dstdout.encoding=UTF-8 -cp target/classes com.commoditytrading.app.Main` |
+
+In IntelliJ IDEA: open the folder as a Maven project and run `src/main/java/com/commoditytrading/app/Main.java`.
+
+**Step mode.** The program asks for the input parameters (Enter keeps the default shown in
+brackets), prints the system load ρ, and then advances the simulation one special event at a time:
+
+| Input | Effect |
+|---|---|
+| Enter | one step |
+| a number, e.g. `25` | that many steps |
+| `r` | run to the end |
+| `q` | quit |
+
+After every step it prints the events of that step, the event calendar (next arrival of every
+source, service end of every device), the buffer slot by slot, the Д2П2 pointer, the active
+Д2Б5 packet and the refusal count. With the default parameters (seed 42) the run ends after
+160 steps with 40 of 100 requests refused.
+
+### Code Structure
+
+| Package | Contents |
+|---|---|
+| `model` | `Request`, `Source` (ИБ, ИЗ2), `Device` (ПЗ1) |
+| `buffer` | `Buffer`: fixed slots, first-free placement, lowest-priority search |
+| `dispatcher` | `PlacementDispatcher` (ДП: Д1ОЗ3 + Д1ОО2), `SelectionDispatcher` (ДВ: Д2П2 + Д2Б5) |
+| `statistics` | `Statistics`: per-source counters, means, variances, device utilisation |
+| `simulation` | `Simulator` (special-event loop), `SimulationEvent`, `SimulationListener` |
+| `app` | `SimulationConfig`, `StepModeView`, `Main`: the console step mode |
+
+The simulation core (`model` … `simulation`) never depends on `app`: the console is only one
+client of the core. `SimulationListener` lets other clients, such as an automatic-mode report or a
+separate service, observe every event without changing the core.
 
 ## 0. Stage 1 — Business Domain & Mapping
 
