@@ -2,34 +2,35 @@ flowchart LR
 
     subgraph SRC["Source i"]
         direction TB
-        A1(["Generate Request r<br/>at interval ИЗ2<br/>(uniform distribution)"])
+        A1(["generateNextRequest():<br/>returns Request r, draws<br/>the next interval ~ U(a, b), ИЗ2"])
     end
 
     subgraph SIM["Simulator"]
         direction TB
-        B1["recordArrival(r),<br/>ДВ.tryServeDirectly(r)"]
+        B0{"step(): earliest event?<br/>(a service end goes<br/>first on a tie)"}
+        B1["recordArrival(r), event GENERATED,<br/>ДВ.tryServeDirectly(r)"]
         B2{"served directly?"}
-        B3["recordServiceStart(r)"]
-        B7["recordRefusal(r_old)"]
-        B4(["Device k reports<br/>serviceComplete(r)"])
-        B5["recordServiceEnd(r),<br/>ДВ.onDeviceFree(device k)"]
-        B6["recordServiceStart for<br/>each started request"]
+        B3["recordServiceStart(r),<br/>event SENT_TO_DEVICE"]
+        B8["event SENT_TO_BUFFER"]
+        B7["recordRefusal(r_old),<br/>event REFUSED"]
+        B5["recordServiceEnd(r), event<br/>SERVICE_FINISHED,<br/>ДВ.onDeviceFree(device k, now)"]
+        B6["event PACKET_FORMED if a packet<br/>was formed, recordServiceStart +<br/>event TAKEN_FROM_PACKET<br/>for each started request"]
+        B9(["events go to every<br/>SimulationListener,<br/>then the next step()"])
     end
 
     subgraph DV["Selection Dispatcher (ДВ)"]
         direction TB
         C1{"isBatchActive()?"}
-        C2{"Д2П2 — scan from pointer:<br/>a free device k?"}
-        C3["advancePointer() past k,<br/>k.startService(r)"]
+        C2{"Д2П2 — selectFreeDevice():<br/>a free device k<br/>scanning from the pointer?"}
+        C3["advancePointer(index of k),<br/>k.startService(r, arrival time)"]
         N1>"Invariant I — while currentBatch<br/>has unassigned members, no device<br/>is idle, so nothing to dispatch here"]
-        C4{"device k is in<br/>batchDevices?"}
-        C5["batchDevices.remove(device k)<br/>(only when its service ends)"]
+        C5["batchDevices.remove(device k)<br/>(no effect if k served a direct<br/>request, only when its service ends)"]
         C6{"currentBatch AND<br/>batchDevices both empty?"}
-        C7{"buffer has a<br/>waiting request?"}
-        C8["Д2Б5 — freeze a NEW batch:<br/>removeAllFromSource(highest-<br/>priority source present).<br/>Later arrivals do NOT join it."]
-        C9{"dispatchBatch():<br/>currentBatch not empty<br/>AND some device free?"}
-        C10["Д2П2 — first free device j<br/>from the pointer,<br/>advancePointer() past j"]
-        C11["take next request from<br/>currentBatch + batchDevices.add(j)<br/>(atomic)"]
+        C7{"formNewBatch():<br/>buffer has a<br/>waiting request?"}
+        C8["Д2Б5 — freeze a NEW batch:<br/>removeAllFromSource(highest-<br/>priority source present),<br/>sorted oldest first.<br/>Later arrivals do NOT join it."]
+        C9{"dispatchBatch(now):<br/>currentBatch not empty<br/>AND some device free?"}
+        C10["Д2П2 — selectFreeDevice():<br/>first free device j from the<br/>pointer, advancePointer(index of j)"]
+        C11["currentBatch.pollFirst() +<br/>batchDevices.add(j) (atomic),<br/>j.startService(r_next, now)"]
         C12["return the list of<br/>requests started"]
     end
 
@@ -37,10 +38,10 @@ flowchart LR
         direction TB
         D1["onRequestArrival(r)"]
         D2{"Buffer isFull()?"}
-        D3["Д1ОЗ3 — placeRequest(r)<br/>in first free slot,<br/>no shifting"]
-        D4["Д1ОО2 — findLowestPriorityRequest()"]
-        D5["remove(r_old),<br/>placeRequest(r)"]
-        D6["return r_old as refused"]
+        D3["Д1ОЗ3 — placeRequest(r)<br/>in first free slot, no shifting,<br/>return Optional.empty()"]
+        D4["Д1ОО2 — applyRefusalDiscipline(now):<br/>findLowestPriorityRequest()"]
+        D5["remove(r_old),<br/>r_old.markRefused(now),<br/>placeRequest(r)"]
+        D6["return Optional.of(r_old)"]
     end
 
     subgraph BUF["Buffer (capacity 20)"]
@@ -50,14 +51,18 @@ flowchart LR
 
     subgraph DEV["Worker(s) / Devices 1..4"]
         direction TB
-        F1["Device: startService(request)"]
+        F1["Device: startService(request, now)<br/>returns the service end time"]
         F2(["Device: BUSY<br/>(duration ~ Exp(λ), ПЗ1)"])
-        F3["Device: completeService()"]
+        F3["Device k: completeService()<br/>returns r (SERVED)"]
         F4(["devices not assigned<br/>stay idle (FREE)"])
     end
 
+    %% --- Event selection ---
+    B0 -- "arrival of source i" --> A1
+    B0 -- "service end of device k" --> F3
+
     %% --- Arrival path ---
-    A1 -- "triggers" --> B1
+    A1 -- "returns r" --> B1
     B1 --> C1
     C1 -- "no" --> C2
     C1 -- "yes — returns false,<br/>r may not bypass the batch" --> B2
@@ -68,27 +73,28 @@ flowchart LR
     B2 -- "yes" --> B3
     B2 -- "no" --> D1
     B2 -. "see Invariant I" .-> N1
+    B3 --> B9
 
     D1 --> D2
     D2 -- "free slot available" --> D3
     D3 --> E1
+    D3 --> B8
     D2 -- "all 20 slots full" --> D4
     D4 --> D5
     D5 --> E1
     D5 --> D6
     D6 --> B7
+    B7 --> B8
+    B8 --> B9
 
     %% --- Service path ---
     F1 --> F2
-    F2 -- "service time elapses" --> F3
-    F3 -- "triggers" --> B4
-    B4 --> B5
-    B5 --> C4
+    F2 -. "its service end time<br/>becomes a future event" .-> B0
+    F3 --> B5
+    B5 --> C5
 
     %% --- Device-free / Д2Б5 lifecycle ---
-    C4 -- "yes" --> C5
     C5 --> C6
-    C4 -- "no" --> C6
     C6 -- "yes — batch fully<br/>processed, or none active" --> C7
     C6 -- "no — batch continues, or still<br/>in progress on other devices" --> C9
     C7 -. "highestPrioritySourcePresent()" .-> E1
@@ -104,3 +110,5 @@ flowchart LR
     C9 -- "no" --> C12
     C12 -. "any device not assigned" .-> F4
     C12 --> B6
+    B6 --> B9
+    B9 --> B0

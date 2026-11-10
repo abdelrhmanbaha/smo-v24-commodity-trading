@@ -1,70 +1,86 @@
 sequenceDiagram
-    participant S as Source i
     participant Sim as Simulator
+    participant S as Source i
+    participant St as Statistics
     participant ДВ as SelectionDispatcher (ДВ)
     participant ДП as PlacementDispatcher (ДП)
     participant D as Devices[1..4]
     participant B as Buffer (cap. 20)
 
-    loop every inter-arrival interval (ИЗ2 — uniform distribution)
-        S->>Sim: generate Request r (time Tвх)
-        Sim->>Sim: recordArrival(r)
+    Note over Sim: run(): while hasNextEvent(), step() takes the earliest<br/>event — an arrival (nextArrivingSource()) or a service<br/>end (nextFinishingDevice()), and a service end goes first on a tie
+
+    loop every step() whose earliest event is an arrival of source i (ИЗ2 — uniform intervals)
+        Sim->>Sim: currentTime = i.getNextArrivalTime()
+        Sim->>S: generateNextRequest()
+        Note right of S: next interval ~ U(a, b), per ИЗ2
+        S-->>Sim: Request r (label i.k)
+        Sim->>St: recordArrival(r)
+        Sim->>Sim: events.add(GENERATED, r)
         Sim->>ДВ: tryServeDirectly(r)
         ДВ->>ДВ: isBatchActive()
         ДВ-->>ДВ: true / false
         opt no batch is active
+            ДВ->>ДВ: selectFreeDevice()
             ДВ->>D: scan from pointer: isFree()?
             D-->>ДВ: first free device k, or none
         end
-
+    
         alt no batch active AND a free device k was found
             Note right of ДВ: Д2П2 — round-robin: first free<br/>device scanning from the pointer
-            ДВ->>ДВ: advancePointer() past k
-            ДВ->>D: k.startService(r)
-            Note right of D: service duration ~ Exp(λ),<br/>per ПЗ1
+            ДВ->>ДВ: advancePointer(index of k)
+            ДВ->>D: k.startService(r, r.getGenerationTime())
+            Note right of D: service time ~ Exp(λ), per ПЗ1
+            D-->>ДВ: service end time
             ДВ-->>Sim: true (served directly)
-            Sim->>Sim: recordServiceStart(r)
+            Sim->>St: recordServiceStart(r)
+            Sim->>Sim: events.add(SENT_TO_DEVICE, r, k)
         else a batch is active, OR all 4 devices are busy
             ДВ-->>Sim: false
             Note over Sim,ДВ: r may NOT bypass an active batch.<br/>Invariant I — while currentBatch has<br/>unassigned members, no device is idle,<br/>so there is nothing to dispatch here.
             Sim->>ДП: onRequestArrival(r)
-            ДП->>B: isFull()?
+            ДП->>B: isFull()
             B-->>ДП: true / false
             alt buffer has a free slot
                 Note right of ДП: Д1ОЗ3 — first free slot<br/>from the start, no shifting
                 ДП->>B: placeRequest(r)
-                ДП-->>Sim: null (nothing refused)
+                ДП-->>Sim: Optional.empty() (nothing refused)
             else buffer full (all 20 slots)
-                Note right of ДП: Д1ОО2 — refuse the buffered<br/>request whose source has<br/>the lowest priority
+                Note right of ДП: Д1ОО2 — refuse the buffered<br/>request whose source has the<br/>lowest priority (newest on a tie)
+                ДП->>ДП: applyRefusalDiscipline(now)
                 ДП->>B: findLowestPriorityRequest()
-                B-->>ДП: r_old (lowest-priority)
+                B-->>ДП: r_old (lowest priority)
                 ДП->>B: remove(r_old)
+                ДП->>ДП: r_old.markRefused(now)
                 ДП->>B: placeRequest(r)
-                ДП-->>Sim: r_old (refused)
-                Sim->>Sim: recordRefusal(r_old)
+                ДП-->>Sim: Optional.of(r_old) (refused)
+                Sim->>St: recordRefusal(r_old)
+                Sim->>Sim: events.add(REFUSED, r_old)
             end
-            Note over B: r now waits in the buffer
+            Sim->>Sim: events.add(SENT_TO_BUFFER, r)
         end
     end
 
-    Note over D,B: ... simulated time passes, eventually<br/>device k finishes the request it was serving ...
+    Note over D,B: ... simulated time passes, and the earliest event is now<br/>the service end of device k, which was serving r_prev ...
 
-    D->>Sim: serviceComplete(r_prev) on device k
-    Sim->>Sim: recordServiceEnd(r_prev)
-    Sim->>ДВ: onDeviceFree(device k)
+    Sim->>Sim: currentTime = k.getServiceEndTime()
+    Sim->>D: k.completeService()
+    D-->>Sim: Request r_prev (now SERVED)
+    Sim->>St: recordServiceEnd(r_prev)
+    Sim->>Sim: events.add(SERVICE_FINISHED, r_prev, k)
+    Sim->>ДВ: onDeviceFree(device k, now)
 
-    opt device k is in batchDevices
-        ДВ->>ДВ: batchDevices.remove(device k)
-        Note right of ДВ: a device leaves batchDevices<br/>only here — when its service<br/>has actually finished
-    end
+    ДВ->>ДВ: batchDevices.remove(device k)
+    Note right of ДВ: no effect if k served a direct<br/>request — a device leaves<br/>batchDevices only here, when its<br/>service has actually finished
 
     alt currentBatch AND batchDevices both empty (batch fully processed, or none active)
+        ДВ->>ДВ: formNewBatch()
         ДВ->>B: highestPrioritySourcePresent()
-        B-->>ДВ: sourceId, or none if buffer empty
+        B-->>ДВ: OptionalInt sourceId (empty if buffer is empty)
         opt buffer had a waiting request
-            Note right of ДВ: Д2Б5 — freeze a NEW batch: pull ALL<br/>buffered requests of the highest-priority<br/>source present (sourceId). r joins this<br/>batch only if sourceId is r's own source,<br/>otherwise r keeps waiting for a later<br/>batch. Requests from sourceId that arrive<br/>after this point do NOT join it.
+            Note right of ДВ: Д2Б5 — freeze a NEW batch:<br/>pull ALL requests of that source<br/>currently in the buffer. Requests<br/>from it that arrive AFTER this<br/>point do NOT join this batch.
             ДВ->>B: removeAllFromSource(sourceId)
-            B-->>ДВ: currentBatch = [...]
+            B-->>ДВ: List [r1, r2, ...]
+            ДВ->>ДВ: sort oldest first → currentBatch,<br/>formedBatchCount++
         end
     else currentBatch empty, but batchDevices not empty
         Note right of ДВ: the active batch is still being<br/>processed on other devices —<br/>the NEXT batch may not form yet.<br/>dispatchBatch() will find nothing.
@@ -72,20 +88,27 @@ sequenceDiagram
         Note right of ДВ: the active batch continues
     end
 
-    ДВ->>ДВ: dispatchBatch()
-    loop while currentBatch not empty AND some device is free
+    ДВ->>ДВ: dispatchBatch(now)
+    loop while currentBatch not empty AND selectFreeDevice() finds a device
         ДВ->>D: scan from pointer: isFree()?
         D-->>ДВ: first free device j (device k, or one left idle earlier)
         Note right of ДВ: Д2П2 — round-robin selection
-        ДВ->>ДВ: advancePointer() past j
-        ДВ->>ДВ: take next request from currentBatch
+        ДВ->>ДВ: advancePointer(index of j)
+        ДВ->>ДВ: r_next = currentBatch.pollFirst()
         ДВ->>ДВ: batchDevices.add(device j)
         Note right of ДВ: take + add are atomic — two<br/>statements of this one handler,<br/>no event can run in between
-        ДВ->>D: j.startService(request)
-        Note right of D: service duration ~ Exp(λ),<br/>per ПЗ1
+        ДВ->>D: j.startService(r_next, now)
+        Note right of D: service time ~ Exp(λ), per ПЗ1
     end
     Note right of ДВ: every device still free here stays<br/>idle — either no batch member is<br/>left, or the buffer was empty
-    ДВ-->>Sim: requests started (possibly none)
-    Sim->>Sim: recordServiceStart(each started request)
+    ДВ-->>Sim: List of requests started (possibly empty)
+    opt formedBatchCount grew
+        Sim->>Sim: events.add(PACKET_FORMED, "source s, n request(s)")
+    end
+    loop each started request r_s
+        Sim->>St: recordServiceStart(r_s)
+        Sim->>Sim: events.add(TAKEN_FROM_PACKET, r_s, its device)
+    end
 
     Note over Sim,D: If request r is buffered, it is served when a batch<br/>containing it is formed. This happens only when its<br/>source has the highest priority among sources in the<br/>buffer and the previous batch has fully finished.
+    Note over Sim: after each step() the events go to every<br/>SimulationListener (step mode prints them)
