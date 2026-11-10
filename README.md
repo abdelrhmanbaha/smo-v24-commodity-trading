@@ -1,4 +1,4 @@
-# СМО (Queuing System) — Variant 24. Primary Design Artifacts (Stage 2)
+# СМО (Queuing System) Simulator — Variant 24
 
 Domain: **Commodity Trading and Supply Chain Management Platform**
 Variant 24: `ИБ · ИЗ2 · ПЗ1 · Д1ОЗ3 · Д1ОО2 · Д2П2 · Д2Б5 · ОР1 · ОД3`
@@ -93,32 +93,45 @@ separate service, observe every event without changing the core.
 Mermaid source: [`class-diagram.mmd`](docs/diagrams/class-diagram.mmd)
 
 **Design notes:**
+- The diagram is grouped by Java package. The simulation core (`model`, `buffer`, `dispatcher`,
+  `statistics`, `simulation`) never refers to `app`; `app` is the console client of the core.
+  Validation helpers and `toString()` are left out of the diagram.
 - `Source` is one class with 5 instances (not 5 subclasses) — they differ only in `name` and
-  `priority`. `priority` is the source number (a lower number means a higher priority, as defined in the
-  Stage 1 mapping) and is what Д1ОО2 and Д2Б5 compare.
+  `id`. `getPriority()` returns the source number (a lower number means a higher priority, as
+  defined in the Stage 1 mapping) and is what Д1ОО2 and Д2Б5 compare.
 - `Request` is the final, agreed definition of "Заявка": one complete trade/order operation
-  from a single source (not its internal steps).
+  from a single source (not its internal steps). Its label `sourceId.sequenceNumber` (e.g. `2.5`)
+  identifies it in step mode.
 - Every attribute is **private** (`-`); only the operations a collaborator actually needs are
   public (`+`). Both dispatchers hold the `Buffer` through a **private** field, and ДВ also
   holds the `Device` array privately (it needs it for the Д2П2 round-robin scan) — so callers
-  never pass internal structures as parameters.
+  never pass internal structures as parameters. The two records (`SimulationEvent`,
+  `SimulationConfig`) expose read-only components.
+- The model has no global clock object: the current time is passed in where it is needed —
+  `Device.startService(request, now)` returns the service end time (ПЗ1), and
+  `SelectionDispatcher.onDeviceFree(device, now)` starts packet members at `now`.
 - The dispatchers **return** their results instead of reaching back into the `Simulator`:
-  `PlacementDispatcher.onRequestArrival(r)` returns the refused request (or `null`),
-  `SelectionDispatcher.tryServeDirectly(r)` returns whether `r` was put straight into service,
-  and `SelectionDispatcher.onDeviceFree(d)` returns the list of requests it started. The
-  `Simulator` then records the corresponding statistics.
-- `SelectionDispatcher` (ДВ) owns device selection (Д2П2) and batch selection (Д2Б5). Its
-  public interface is just `tryServeDirectly(r)` (arrival event) and `onDeviceFree(d)`
-  (service-completion event); everything else — `isBatchActive()`, `formNewBatch()`,
-  `dispatchBatch()`, `selectFreeDevice()`, `advancePointer()` — is private.
+  `PlacementDispatcher.onRequestArrival(r)` returns `Optional<Request>` — the refused request,
+  or empty if nothing was refused; `SelectionDispatcher.tryServeDirectly(r)` returns whether `r`
+  was put straight into service; and `SelectionDispatcher.onDeviceFree(d, now)` returns the list
+  of requests it started. The `Simulator` then records the corresponding statistics and events.
+- `SelectionDispatcher` (ДВ) owns device selection (Д2П2) and batch selection (Д2Б5). It changes
+  state only through `tryServeDirectly(r)` (arrival event) and `onDeviceFree(d, now)`
+  (service-completion event); `isBatchActive()`, `formNewBatch()`, `dispatchBatch(now)`,
+  `selectFreeDevice()` and `advancePointer(index)` are private. Its public getters only read
+  state for step mode (pointer, active packet, members still to hand out).
 - Batch state in ДВ: `currentBatch` holds the frozen batch's members **not yet assigned** to a
   device, `currentBatchSourceId` records which source it was frozen from, and `batchDevices`
   holds the devices **currently in service** on a batch member.
   `isBatchActive() = !currentBatch.isEmpty() || !batchDevices.isEmpty()`.
-- `Statistics` is kept separate from `Simulator` so it can feed both ОР1 (summary table) and
-  ОД3 (time diagrams / live state) without duplicating counting logic. `getTimeDiagram()` here
-  only means "the data this class can supply for ОД3" — it is not a separate diagram
-  artifact at this stage.
+- `Statistics` is kept separate from `Simulator` and only counts: per source it keeps the
+  number of generated, started and refused requests, and running sums for the means and sample
+  variances of time in system, waiting time and service time. It feeds the ОР1 summary tables;
+  device utilisation is computed from each device's total busy time.
+- `Simulator` runs the special-event method: `step()` processes the next event (a service end
+  before an arrival at the same time) and returns the `SimulationEvent`s it produced; the same
+  events go to every `SimulationListener`. Step mode (ОД3, shown as an event calendar table as
+  required by the course memo) is built from these events and the read-only getters.
 
 ## 2. Main Sequence Diagram — Full Request Lifecycle
 

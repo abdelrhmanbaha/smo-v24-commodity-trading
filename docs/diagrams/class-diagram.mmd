@@ -1,124 +1,307 @@
 classDiagram
     direction LR
 
-    class Source {
-        -int id
-        -string name
-        -int priority
-        -float nextArrivalTime
-        +generateNextRequest() Request
-        +getPriority() int
+    namespace model {
+        class Source {
+            -int id
+            -String name
+            -double minInterval
+            -double maxInterval
+            -RandomGenerator random
+            -double nextArrivalTime
+            -int generatedCount
+            +Source(int id, String name, double minInterval, double maxInterval, RandomGenerator random)
+            +generateNextRequest() Request
+            -drawInterval() double
+            +getMeanInterval() double
+            +getId() int
+            +getPriority() int
+            +getName() String
+            +getNextArrivalTime() double
+            +getGeneratedCount() int
+        }
+
+        class Request {
+            -int sourceId
+            -int sequenceNumber
+            -double generationTime
+            -RequestStatus status
+            -double serviceStartTime
+            -double serviceEndTime
+            -double refusalTime
+            +Request(int sourceId, int sequenceNumber, double generationTime)
+            +markServiceStarted(double time)
+            +markServed(double time)
+            +markRefused(double time)
+            +getWaitingTime() double
+            +getServiceTime() double
+            +getTimeInSystem() double
+            +getSourceId() int
+            +getSequenceNumber() int
+            +getGenerationTime() double
+            +getStatus() RequestStatus
+            +getServiceStartTime() double
+            +getServiceEndTime() double
+            +getRefusalTime() double
+            +getLabel() String
+        }
+
+        class Device {
+            -int id
+            -double serviceRate
+            -RandomGenerator random
+            -DeviceStatus status
+            -Request currentRequest
+            -double serviceEndTime
+            -double totalBusyTime
+            +Device(int id, double serviceRate, RandomGenerator random)
+            +startService(Request request, double now) double
+            +completeService() Request
+            -drawServiceTime() double
+            +isFree() boolean
+            +getId() int
+            +getStatus() DeviceStatus
+            +getCurrentRequest() Request
+            +getServiceEndTime() double
+            +getTotalBusyTime() double
+            +getServiceRate() double
+        }
+
+        class RequestStatus {
+            <<enumeration>>
+            WAITING
+            IN_SERVICE
+            SERVED
+            REFUSED
+        }
+
+        class DeviceStatus {
+            <<enumeration>>
+            FREE
+            BUSY
+        }
     }
 
-    class Request {
-        -int id
-        -int sourceId
-        -float timeGenerated
-        -float serviceStartTime
-        -float serviceEndTime
-        -RequestStatus status
-        +getSourceId() int
-        +setStatus(RequestStatus s)
+    namespace buffer {
+        class Buffer {
+            -Request[] slots
+            +Buffer(int capacity)
+            +placeRequest(Request request) boolean
+            +remove(Request request)
+            +findLowestPriorityRequest() Request
+            +highestPrioritySourcePresent() OptionalInt
+            +requestsFromSource(int sourceId) List~Request~
+            +removeAllFromSource(int sourceId) List~Request~
+            +contains(Request request) boolean
+            +isFull() boolean
+            +isEmpty() boolean
+            +size() int
+            +capacity() int
+            +snapshot() List~Request~
+        }
     }
 
-    class Buffer {
-        -int capacity
-        -Request[] slots
-        +isFull() bool
-        +isEmpty() bool
-        +placeRequest(Request r) bool
-        +findLowestPriorityRequest() Request
-        +remove(Request r)
-        +removeAllFromSource(int sourceId) Request[]
-        +highestPrioritySourcePresent() int
+    namespace dispatcher {
+        class PlacementDispatcher {
+            <<ДП>>
+            -Buffer buffer
+            +PlacementDispatcher(Buffer buffer)
+            +onRequestArrival(Request request) Optional~Request~
+            -applyRefusalDiscipline(double now) Request
+        }
+
+        class SelectionDispatcher {
+            <<ДВ>>
+            -Buffer buffer
+            -Device[] devices
+            -int devicePointer
+            -Deque~Request~ currentBatch
+            -int currentBatchSourceId
+            -Set~Device~ batchDevices
+            -int formedBatchCount
+            +SelectionDispatcher(Buffer buffer, List~Device~ devices)
+            +tryServeDirectly(Request request) boolean
+            +onDeviceFree(Device device, double now) List~Request~
+            -isBatchActive() boolean
+            -formNewBatch()
+            -dispatchBatch(double now) List~Request~
+            -selectFreeDevice() Device
+            -advancePointer(int chosenIndex)
+            +getPointerDeviceId() int
+            +getActiveBatchSourceId() OptionalInt
+            +getFormedBatchCount() int
+            +getPendingBatchMembers() List~Request~
+        }
     }
 
-    class PlacementDispatcher {
-        <<ДП>>
-        -Buffer buffer
-        +onRequestArrival(Request r) Request
-        -applyRefusalDiscipline() Request
+    namespace statistics {
+        class Statistics {
+            -SourceCounters[] perSource
+            +Statistics(int sourceCount)
+            +recordArrival(Request request)
+            +recordServiceStart(Request request)
+            +recordServiceEnd(Request request)
+            +recordRefusal(Request request)
+            +generatedCount(int sourceId) int
+            +refusedCount(int sourceId) int
+            +startedCount(int sourceId) int
+            +servedCount(int sourceId) int
+            +refusalProbability(int sourceId) double
+            +meanTimeInSystem(int sourceId) double
+            +meanWaitingTime(int sourceId) double
+            +meanServiceTime(int sourceId) double
+            +waitingTimeVariance(int sourceId) double
+            +serviceTimeVariance(int sourceId) double
+            +totalGenerated() int
+            +totalRefused() int
+            +overallRefusalProbability() double
+            +utilization(Device device, double totalRunTime)$ double
+            +sourceCount() int
+        }
+
+        class SourceCounters {
+            <<private nested>>
+            -int generated
+            -int started
+            -int refused
+            -RunningStats timeInSystem
+            -RunningStats waitingTime
+            -RunningStats serviceTime
+        }
+
+        class RunningStats {
+            <<private nested>>
+            -int n
+            -double sum
+            -double sumOfSquares
+            ~add(double x)
+            ~count() int
+            ~mean() double
+            ~variance() double
+        }
     }
 
-    class SelectionDispatcher {
-        <<ДВ>>
-        -Buffer buffer
-        -Device[] devices
-        -int devicePointer
-        -Request[] currentBatch
-        -int currentBatchSourceId
-        -Device[] batchDevices
-        +tryServeDirectly(Request r) bool
-        +onDeviceFree(Device d) Request[]
-        -isBatchActive() bool
-        -formNewBatch()
-        -dispatchBatch() Request[]
-        -selectFreeDevice() Device
-        -advancePointer()
+    namespace simulation {
+        class Simulator {
+            -List~Source~ sources
+            -List~Device~ devices
+            -Buffer buffer
+            -PlacementDispatcher placementDispatcher
+            -SelectionDispatcher selectionDispatcher
+            -Statistics statistics
+            -int requestLimit
+            -List~SimulationListener~ listeners
+            -double currentTime
+            +Simulator(List~Source~ sources, List~Device~ devices, int bufferCapacity, int requestLimit)
+            +addListener(SimulationListener listener)
+            +hasNextEvent() boolean
+            +step() List~SimulationEvent~
+            +run()
+            -handleArrival(Source source, List~SimulationEvent~ events)
+            -handleServiceEnd(Device device, List~SimulationEvent~ events)
+            -nextArrivingSource() Source
+            -nextFinishingDevice() Device
+            -deviceServing(Request request) int
+            +getCurrentTime() double
+            +getRequestLimit() int
+            +getStatistics() Statistics
+            +getSources() List~Source~
+            +getDevices() List~Device~
+            +getBufferSnapshot() List~Request~
+            +getPointerDeviceId() int
+            +getActiveBatchSourceId() OptionalInt
+            +getPendingBatchMembers() List~Request~
+        }
+
+        class SimulationEvent {
+            <<record>>
+            +double time
+            +EventType type
+            +Request request
+            +int deviceId
+            +String detail
+        }
+
+        class EventType {
+            <<enumeration>>
+            GENERATED
+            SENT_TO_DEVICE
+            SENT_TO_BUFFER
+            REFUSED
+            PACKET_FORMED
+            TAKEN_FROM_PACKET
+            SERVICE_FINISHED
+            -String description
+            +getDescription() String
+        }
+
+        class SimulationListener {
+            <<interface>>
+            +onEvent(SimulationEvent event)
+        }
     }
 
-    class Device {
-        -int id
-        -DeviceStatus status
-        -Request currentRequest
-        +startService(Request r)
-        +completeService() Request
-        +isFree() bool
+    namespace app {
+        class SimulationConfig {
+            <<record>>
+            +int sourceCount
+            +double minInterval
+            +double maxInterval
+            +int deviceCount
+            +double serviceRate
+            +int bufferCapacity
+            +int requestLimit
+            +long seed
+            +List~String~ SOURCE_NAMES$
+            +defaults()$ SimulationConfig
+            +buildSimulator() Simulator
+            +load() double
+        }
+
+        class StepModeView {
+            +render(int stepNumber, List~SimulationEvent~ events, Simulator sim)$ String
+        }
+
+        class Main {
+            +main(String[] args)$
+        }
     }
 
-    class Simulator {
-        -float currentTime
-        -Source[] sources
-        -Buffer buffer
-        -PlacementDispatcher dispatcherIn
-        -SelectionDispatcher dispatcherOut
-        -Device[] devices
-        -Statistics stats
-        +run()
-        +step()
-        +onRequestArrival(Request r)
-        +onServiceComplete(Device d)
-    }
+    Simulator "1" o-- "1..*" Source : sources
+    Simulator "1" o-- "1..*" Device : devices
+    Simulator "1" *-- "1" Buffer : creates
+    Simulator "1" *-- "1" PlacementDispatcher : creates
+    Simulator "1" *-- "1" SelectionDispatcher : creates
+    Simulator "1" *-- "1" Statistics : creates
+    Simulator "1" o-- "0..*" SimulationListener : notifies
+    Simulator ..> SimulationEvent : creates
 
-    class Statistics {
-        -int generatedCount
-        -int servedCount
-        -int refusedCount
-        +recordArrival(Request r)
-        +recordServiceStart(Request r)
-        +recordServiceEnd(Request r)
-        +recordRefusal(Request r)
-        +getSummaryTable() SummaryTable
-        +getTimeDiagram() TimeDiagram
-    }
-
-    class RequestStatus {
-        <<enumeration>>
-        WAITING
-        IN_SERVICE
-        SERVED
-        REFUSED
-    }
-
-    class DeviceStatus {
-        <<enumeration>>
-        FREE
-        BUSY
-    }
-
-    Simulator "1" --> "5" Source : owns
-    Simulator "1" --> "1" Buffer : owns
-    Simulator "1" --> "1" PlacementDispatcher : owns
-    Simulator "1" --> "1" SelectionDispatcher : owns
-    Simulator "1" --> "4" Device : owns
-    Simulator "1" --> "1" Statistics : owns
     Source ..> Request : creates
-    Buffer "1" o-- "0..20" Request : holds
-    PlacementDispatcher "1" --> "1" Buffer : buffer (private ref.)
-    SelectionDispatcher "1" --> "1" Buffer : buffer (private ref.)
-    SelectionDispatcher "1" --> "4" Device : devices (private ref., Д2П2)
-    SelectionDispatcher "1" o-- "0..*" Request : currentBatch (unassigned)
-    SelectionDispatcher "1" o-- "0..4" Device : batchDevices (in service)
-    Device ..> Request : processes
+    Device "1" --> "0..1" Request : currentRequest
     Request --> RequestStatus
     Device --> DeviceStatus
+    Buffer "1" o-- "0..capacity" Request : slots
+
+    PlacementDispatcher "1" --> "1" Buffer : buffer (Д1ОЗ3, Д1ОО2)
+    SelectionDispatcher "1" --> "1" Buffer : buffer (Д2Б5)
+    SelectionDispatcher "1" --> "1..*" Device : devices (Д2П2)
+    SelectionDispatcher "1" o-- "0..*" Request : currentBatch (unassigned)
+    SelectionDispatcher "1" o-- "0..*" Device : batchDevices (in service)
+
+    Statistics "1" *-- "1..*" SourceCounters : perSource
+    SourceCounters "1" *-- "3" RunningStats
+    Statistics ..> Request : reads
+    Statistics ..> Device : utilization
+
+    SimulationEvent --> EventType
+    SimulationEvent --> Request
+    SimulationListener ..> SimulationEvent : receives
+
+    SimulationConfig ..> Simulator : builds
+    SimulationConfig ..> Source : creates
+    SimulationConfig ..> Device : creates
+    StepModeView ..> Simulator : reads
+    StepModeView ..> SimulationEvent : reads
+    Main ..> SimulationConfig : uses
+    Main ..> StepModeView : uses
+    Main ..> Simulator : runs
