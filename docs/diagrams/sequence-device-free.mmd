@@ -1,56 +1,42 @@
 sequenceDiagram
     participant Sim as Simulator
-    participant St as Statistics
     participant ДВ as SelectionDispatcher (ДВ)
     participant D as Devices[1..4]
     participant B as Buffer (cap. 20)
 
-    Note over Sim: step(): the earliest event is the service<br/>end of device k (nextFinishingDevice()),<br/>on a tie with an arrival it goes first
-    Sim->>Sim: currentTime = k.getServiceEndTime()
+    Note over Sim: step(): the earliest event is the service end<br/>of device k (it goes first on a tie with an arrival)
     Sim->>D: k.completeService()
-    D-->>Sim: Request r (now SERVED)
-    Sim->>St: recordServiceEnd(r)
-    Sim->>Sim: events.add(SERVICE_FINISHED, r, k)
+    D-->>Sim: Request r (SERVED)
+    Sim->>Sim: recordServiceEnd(r)
     Sim->>ДВ: onDeviceFree(device k, now)
-
     ДВ->>ДВ: batchDevices.remove(device k)
-    Note right of ДВ: no effect if k served a direct<br/>request — a device leaves<br/>batchDevices only here, when its<br/>service has actually finished
+    Note right of ДВ: a device leaves batchDevices<br/>only when its service has finished
 
     alt currentBatch AND batchDevices both empty (batch fully processed, or none active)
         ДВ->>ДВ: formNewBatch()
         ДВ->>B: highestPrioritySourcePresent()
-        B-->>ДВ: OptionalInt sourceId (empty if buffer is empty)
+        B-->>ДВ: sourceId, or empty if the buffer is empty
         opt buffer had a waiting request
-            Note right of ДВ: Д2Б5 — freeze a NEW batch:<br/>pull ALL requests of that source<br/>currently in the buffer. Requests<br/>from it that arrive AFTER this<br/>point do NOT join this batch.
+            Note right of ДВ: Д2Б5 — freeze a NEW batch: ALL requests of<br/>that source now in the buffer, oldest first.<br/>Later arrivals do NOT join it.
             ДВ->>B: removeAllFromSource(sourceId)
-            B-->>ДВ: List [r1, r2, ...]
-            ДВ->>ДВ: sort oldest first → currentBatch,<br/>formedBatchCount++
+            B-->>ДВ: currentBatch = [r1, r2, ...]
         end
     else currentBatch empty, but batchDevices not empty
-        Note right of ДВ: the active batch is still being<br/>processed on other devices —<br/>the NEXT batch may not form yet.<br/>dispatchBatch() will find nothing.
+        Note right of ДВ: the batch is still in service on other<br/>devices — the NEXT batch may not form yet
     else currentBatch still has unassigned members
         Note right of ДВ: the active batch continues
     end
 
     ДВ->>ДВ: dispatchBatch(now)
-    loop while currentBatch not empty AND selectFreeDevice() finds a device
-        ДВ->>D: scan from pointer: isFree()?
-        D-->>ДВ: first free device j (device k, or one left idle earlier)
+    loop while currentBatch not empty AND some device is free
+        ДВ->>D: selectFreeDevice(): scan from pointer, isFree()?
+        D-->>ДВ: first free device j
         Note right of ДВ: Д2П2 — round-robin selection
         ДВ->>ДВ: advancePointer(index of j)
-        ДВ->>ДВ: r_next = currentBatch.pollFirst()
-        ДВ->>ДВ: batchDevices.add(device j)
-        Note right of ДВ: take + add are atomic — two<br/>statements of this one handler,<br/>no event can run in between
+        ДВ->>ДВ: take r_next from currentBatch,<br/>batchDevices.add(device j)
         ДВ->>D: j.startService(r_next, now)
-        Note right of D: service time ~ Exp(λ), per ПЗ1
+        Note right of D: service time ~ Exp(λ), ПЗ1
     end
-    Note right of ДВ: every device still free here stays<br/>idle — either no batch member is<br/>left, or the buffer was empty
-    ДВ-->>Sim: List of requests started (possibly empty)
-    opt formedBatchCount grew
-        Sim->>Sim: events.add(PACKET_FORMED, "source s, n request(s)")
-    end
-    loop each started request r_s
-        Sim->>St: recordServiceStart(r_s)
-        Sim->>Sim: events.add(TAKEN_FROM_PACKET, r_s, its device)
-    end
-    Note over Sim: step() passes the events to every<br/>SimulationListener and returns them
+    Note right of ДВ: devices still free here stay idle — no batch<br/>member is left, or the buffer was empty
+    ДВ-->>Sim: list of requests started (possibly empty)
+    Sim->>Sim: recordServiceStart(each started request)

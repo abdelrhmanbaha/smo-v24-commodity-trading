@@ -95,7 +95,9 @@ Mermaid source: [`class-diagram.mmd`](docs/diagrams/class-diagram.mmd)
 **Design notes:**
 - The diagram is grouped by Java package. The simulation core (`model`, `buffer`, `dispatcher`,
   `statistics`, `simulation`) never refers to `app`; `app` is the console client of the core.
-  Validation helpers and `toString()` are left out of the diagram.
+  To keep it readable, the diagram shows the fields and the operations that implement the
+  variant's rules; simple getters, constructors, validation helpers, `toString()` and the private
+  helper classes inside `Statistics` are left out. Everything that is shown matches the code.
 - `Source` is one class with 5 instances (not 5 subclasses) — they differ only in `name` and
   `id`. `getPriority()` returns the source number (a lower number means a higher priority, as
   defined in the Stage 1 mapping) and is what Д1ОО2 and Д2Б5 compare.
