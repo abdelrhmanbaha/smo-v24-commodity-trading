@@ -1,8 +1,8 @@
 sequenceDiagram
-    participant Sim as Simulator
-    participant ДВ as SelectionDispatcher (ДВ)
-    participant D as Devices[1..4]
-    participant B as Buffer (cap. 20)
+    participant Sim as Симулятор<br/>Simulator
+    participant ДВ as Диспетчер выбора (ДВ)<br/>SelectionDispatcher
+    participant D as Приборы П1–П4<br/>Device
+    participant B as Буфер, 20 мест (Б)<br/>Buffer
 
     Note over Sim: step(): the earliest event is the service end<br/>of device k (it goes first on a tie with an arrival)
     Sim->>D: k.completeService()
