@@ -8,10 +8,14 @@ import java.util.Locale;
 import java.util.Scanner;
 
 /**
- * Step mode: asks for the input parameters (Enter keeps the default), then runs the simulation
- * one special event at a time and prints the event calendar after every step.
+ * Console entry point. Asks for the mode and the input parameters (Enter keeps the default), then
+ * runs the simulation.
  *
- * <p>Commands: Enter = next step, a number = that many steps, "r" = run to the end, "q" = quit.
+ * <ul>
+ *   <li><b>Step mode</b> (ОД3): one special event at a time, the event calendar after every step.
+ *       Commands: Enter = next step, a number = that many steps, "r" = run to the end, "q" = quit.</li>
+ *   <li><b>Automatic mode</b> (ОР1): runs to the end without stopping and prints only the summary.</li>
+ * </ul>
  */
 public final class Main {
 
@@ -23,7 +27,8 @@ public final class Main {
         SimulationConfig d = SimulationConfig.defaults();
 
         System.out.println("СМО variant 24 — Commodity Trading and Supply Chain Platform");
-        System.out.println("Step mode. Press Enter to keep a default value.\n");
+        boolean automatic = askAutomatic(in);
+        System.out.println("Press Enter to keep a default value.\n");
         SimulationConfig config = new SimulationConfig(
                 askInt(in, "Number of sources", d.sourceCount()),
                 askDouble(in, "ИЗ2: shortest interval a", d.minInterval()),
@@ -36,6 +41,23 @@ public final class Main {
         System.out.printf(Locale.ROOT, "%nSystem load ρ = %.3f%n", config.load());
 
         Simulator sim = config.buildSimulator();
+        if (automatic) {
+            runAutomatic(sim);
+        } else {
+            runStepMode(in, sim);
+        }
+    }
+
+    /** Automatic mode: the whole run at once, then the summary tables. */
+    private static void runAutomatic(Simulator sim) {
+        sim.run();
+        System.out.printf(Locale.ROOT, "%nAutomatic mode: simulation complete at t = %.4f.%n",
+                sim.getCurrentTime());
+        System.out.print(SummaryView.render(sim));
+    }
+
+    /** Step mode: the user decides how many events to process at a time. */
+    private static void runStepMode(Scanner in, Simulator sim) {
         int step = 0;
         while (sim.hasNextEvent()) {
             System.out.print("\n[Enter] next step | number = that many steps | r = run to end | q = quit > ");
@@ -57,6 +79,20 @@ public final class Main {
         System.out.printf(Locale.ROOT, "%nSimulation complete after %d steps, at t = %.4f.%n",
                 step, sim.getCurrentTime());
         System.out.print(SummaryView.render(sim));
+    }
+
+    /** Asks for the mode: "s" (or Enter) = step mode, "a" = automatic mode. */
+    private static boolean askAutomatic(Scanner in) {
+        while (true) {
+            String answer = ask(in, "Mode: s = step, a = automatic", "s");
+            if (answer.equalsIgnoreCase("s")) {
+                return false;
+            }
+            if (answer.equalsIgnoreCase("a")) {
+                return true;
+            }
+            System.out.println("  Please type s or a.");
+        }
     }
 
     private static int parsePositive(String text) {
