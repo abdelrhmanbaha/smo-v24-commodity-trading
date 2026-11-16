@@ -47,12 +47,15 @@ Requirements: JDK 21 or newer and Maven 3.9+ (IntelliJ IDEA has Maven built in).
 |---|---|
 | Run all unit tests | `mvn test` |
 | Build | `mvn package` |
-| Start step mode | `java -Dstdout.encoding=UTF-8 -cp target/classes com.commoditytrading.app.Main` |
+| Start the program | `java -Dstdout.encoding=UTF-8 -cp target/classes com.commoditytrading.app.Main` |
 
 In IntelliJ IDEA: open the folder as a Maven project and run `src/main/java/com/commoditytrading/app/Main.java`.
 
-**Step mode.** The program asks for the input parameters (Enter keeps the default shown in
-brackets), prints the system load ρ, and then advances the simulation one special event at a time:
+The program first asks for the mode (`s` = step mode, `a` = automatic mode; Enter keeps step
+mode), then for the input parameters (Enter keeps the default shown in brackets), and prints the
+system load ρ.
+
+**Step mode (ОД3)** advances the simulation one special event at a time:
 
 | Input | Effect |
 |---|---|
@@ -63,8 +66,18 @@ brackets), prints the system load ρ, and then advances the simulation one speci
 
 After every step it prints the events of that step, the event calendar (next arrival of every
 source, service end of every device), the buffer slot by slot, the Д2П2 pointer, the active
-Д2Б5 packet and the refusal count. With the default parameters (seed 42) the run ends after
-160 steps with 40 of 100 requests refused.
+Д2Б5 packet and the refusal count. At the end it prints the summary tables. With the default
+parameters (seed 42) the run ends after 160 steps with 40 of 100 requests refused.
+
+**Automatic mode (ОР1)** runs without stopping and offers two options:
+
+| Option | What it does |
+|---|---|
+| `r` — one run | Optionally chooses N by the formula N = t²(1 − p)/(p·δ²) (t = 1.643, δ = 0.1), starting from the entered N and repeating until p_отк changes by less than 10%; then runs once and prints the summary tables: per source N_gen, N_ref, N_srv, p_отк, T_ож, T_обсл, T_преб, D_ож, D_обсл, and per device K_исп. |
+| `c` — compare configurations | For every combination of the given device counts, service rates λ and buffer sizes, chooses N, runs the simulation and prints one table with p_отк, mean K_исп and mean T_преб; rows with p_отк ≤ 10% are marked. |
+
+With the default parameters the N search settles at N = 244 with p_отк ≈ 54.5%. If a short run
+shows no refusals, N is first raised tenfold (up to 10 000) before concluding p_отк = 0.
 
 ### Code Structure
 
@@ -75,12 +88,11 @@ source, service end of every device), the buffer slot by slot, the Д2П2 pointe
 | `dispatcher` | `PlacementDispatcher` (ДП: Д1ОЗ3 + Д1ОО2), `SelectionDispatcher` (ДВ: Д2П2 + Д2Б5) |
 | `statistics` | `Statistics`: per-source counters, means, variances, device utilisation |
 | `simulation` | `Simulator` (special-event loop), `SimulationEvent`, `SimulationListener` |
-| `app` | `SimulationConfig`, `StepModeView`, `Main`: the console step mode |
+| `app` | `SimulationConfig` (parameters), `StepModeView` (step mode), `SummaryView` (ОР1 tables), `RequestCountSelector` (choice of N), `ConfigurationComparison` + `ComparisonView` (comparison), `Main` (console) |
 
 The simulation core (`model` … `simulation`) never depends on `app`: the console is only one
-client of the core. `SimulationListener` lets other clients, such as an automatic-mode report or a
-separate service, observe every event without changing the core.
-
+client of the core. `SimulationListener` lets other clients, such as a report or a separate
+service, observe every event without changing the core.
 ## 0. Stage 1 — Business Domain & Mapping
 
 - [hegazy_V24_BusinessDomain.pdf](docs/stage1/hegazy_V24_BusinessDomain.pdf)
