@@ -39,13 +39,24 @@ class RequestCountSelectorTest {
     }
 
     @Test
-    void withoutRefusalsTheSearchStopsAtOnce() {
+    void withoutRefusalsNIsRaisedToTheCheckLimitAndTheSearchStops() {
         SimulationConfig light = new SimulationConfig(5, 20.0, 30.0, 4, 1.0, 20, 200, 7);
 
         List<RequestCountSelector.Run> runs = RequestCountSelector.select(light);
 
-        assertEquals(1, runs.size());
-        assertEquals(200, runs.get(0).requestLimit());
+        assertEquals(List.of(200, 2000, 10_000), runs.stream().map(RequestCountSelector.Run::requestLimit).toList());
+        assertEquals(0.0, runs.get(runs.size() - 1).refusalProbability());
+    }
+
+    @Test
+    void aZeroAtSmallNIsCheckedWithALargerN() {
+        // 4 devices with λ = 2.0: 100 requests end before the buffer fills (p = 0),
+        // but a longer run does refuse requests, so the formula takes over.
+        SimulationConfig fast = new SimulationConfig(5, 0.5, 2.5, 4, 2.0, 20, 100, 42);
+
+        List<RequestCountSelector.Run> runs = RequestCountSelector.select(fast);
+
         assertEquals(0.0, runs.get(0).refusalProbability());
+        assertTrue(runs.get(runs.size() - 1).refusalProbability() > 0);
     }
 }

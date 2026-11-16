@@ -15,7 +15,9 @@ import java.util.List;
  *   <li>Stop when p changed by less than 10%; otherwise repeat from step 2 with the new p.</li>
  * </ol>
  *
- * <p>If no request is refused (p = 0) the formula is undefined, so the search stops at once.
+ * <p>If no request is refused (p = 0) the formula is undefined. A short run can show p = 0 only
+ * because it ended before the buffer ever filled, so N is first raised tenfold (up to
+ * {@link #ZERO_CHECK_LIMIT}); only if p is still 0 there does the search stop with p = 0.
  */
 public final class RequestCountSelector {
 
@@ -29,6 +31,8 @@ public final class RequestCountSelector {
     public static final int MAX_REQUESTS = 1_000_000;
     /** Upper limit for the number of runs. */
     public static final int MAX_RUNS = 10;
+    /** While p = 0, N is raised tenfold up to this value before concluding there are no refusals. */
+    public static final int ZERO_CHECK_LIMIT = 10_000;
 
     /** One run of the search: the N used and the refusal probability measured. */
     public record Run(int requestLimit, double refusalProbability) {
@@ -52,6 +56,12 @@ public final class RequestCountSelector {
         SimulationConfig config = start;
         double p = refusalProbability(config);
         runs.add(new Run(config.requestLimit(), p));
+
+        while (p == 0 && config.requestLimit() < ZERO_CHECK_LIMIT && runs.size() < MAX_RUNS) {
+            config = config.withRequestLimit(Math.min(ZERO_CHECK_LIMIT, config.requestLimit() * 10));
+            p = refusalProbability(config);
+            runs.add(new Run(config.requestLimit(), p));
+        }
 
         while (runs.size() < MAX_RUNS && p > 0 && p < 1) {
             config = config.withRequestLimit(requiredRequests(p));

@@ -47,8 +47,13 @@ public final class Main {
         }
     }
 
-    /** Automatic mode: optionally choose N by the formula, then the whole run at once and the summary. */
+    /** Automatic mode: one run with the summary, or a comparison of several configurations. */
     private static void runAutomatic(Scanner in, SimulationConfig config) {
+        String what = ask(in, "Automatic mode: r = one run, c = compare configurations", "r");
+        if (what.equalsIgnoreCase("c")) {
+            runComparison(in, config);
+            return;
+        }
         String answer = ask(in, "Choose N by the formula? y = yes, n = use N as entered", "y");
         if (answer.equalsIgnoreCase("y")) {
             config = chooseRequestCount(config);
@@ -58,6 +63,39 @@ public final class Main {
         System.out.printf(Locale.ROOT, "%nAutomatic mode: simulation complete at t = %.4f.%n",
                 sim.getCurrentTime());
         System.out.print(SummaryView.render(sim));
+    }
+
+    /** Asks which device counts, rates and buffer sizes to try, then prints the comparison table. */
+    private static void runComparison(Scanner in, SimulationConfig base) {
+        System.out.println("Lists are separated by commas; use a dot for decimals (0.6, not 0,6).");
+        List<Integer> devices = askIntList(in, "Device counts to compare", "2, 4, 6, 8");
+        List<Double> rates = askDoubleList(in, "Service rates λ to compare", "0.6, 1.0, 1.5, 2.0");
+        List<Integer> buffers = askIntList(in, "Buffer sizes to compare", String.valueOf(base.bufferCapacity()));
+        System.out.println("\nRunning " + devices.size() * rates.size() * buffers.size()
+                + " configurations (N is chosen by the formula for each)...");
+        List<ConfigurationComparison.Result> results =
+                ConfigurationComparison.compare(base, devices, rates, buffers);
+        System.out.print(ComparisonView.render(results, 0.10));
+    }
+
+    private static List<Integer> askIntList(Scanner in, String label, String defaultValue) {
+        while (true) {
+            try {
+                return ConfigurationComparison.parseInts(ask(in, label, defaultValue));
+            } catch (IllegalArgumentException e) {
+                System.out.println("  Please enter whole numbers separated by commas, for example 2, 4, 6");
+            }
+        }
+    }
+
+    private static List<Double> askDoubleList(Scanner in, String label, String defaultValue) {
+        while (true) {
+            try {
+                return ConfigurationComparison.parseDoubles(ask(in, label, defaultValue));
+            } catch (IllegalArgumentException e) {
+                System.out.println("  Please enter numbers separated by commas, for example 0.6, 1.0");
+            }
+        }
     }
 
     /** Runs the N search, prints every run and returns the configuration with the chosen N. */
@@ -73,8 +111,8 @@ public final class Main {
                     i + 1, run.requestLimit(), 100 * run.refusalProbability());
         }
         int chosen = runs.get(runs.size() - 1).requestLimit();
-        if (runs.size() == 1) {
-            System.out.println("No change possible (p = 0 or 1), so N stays as entered.");
+        if (runs.get(runs.size() - 1).refusalProbability() == 0) {
+            System.out.println("No refusals even with N = " + chosen + ", so p_отк = 0 and the formula is not needed.");
         }
         System.out.printf(Locale.ROOT, "Chosen N = %d%n", chosen);
         return config.withRequestLimit(chosen);

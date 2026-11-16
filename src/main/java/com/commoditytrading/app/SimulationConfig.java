@@ -76,6 +76,11 @@ public record SimulationConfig(int sourceCount, double minInterval, double maxIn
         return new SimulationConfig(sourceCount, minInterval, maxInterval, deviceCount, serviceRate,
                 bufferCapacity, newRequestLimit, seed);
     }
+    /** The same sources, N and seed with a different set of devices and buffer. */
+    public SimulationConfig withSystem(int newDeviceCount, double newServiceRate, int newBufferCapacity) {
+        return new SimulationConfig(sourceCount, minInterval, maxInterval, newDeviceCount, newServiceRate,
+                newBufferCapacity, requestLimit, seed);
+    }
 
     /**
      * System load ρ = total arrival rate / total service rate. One source sends on average
