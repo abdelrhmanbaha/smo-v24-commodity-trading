@@ -71,6 +71,12 @@ public record SimulationConfig(int sourceCount, double minInterval, double maxIn
         return new Simulator(sources, devices, bufferCapacity, requestLimit);
     }
 
+    /** The same parameters with a different number of requests N. */
+    public SimulationConfig withRequestLimit(int newRequestLimit) {
+        return new SimulationConfig(sourceCount, minInterval, maxInterval, deviceCount, serviceRate,
+                bufferCapacity, newRequestLimit, seed);
+    }
+
     /**
      * System load ρ = total arrival rate / total service rate. One source sends on average
      * 1 / ((a + b) / 2) requests per unit of time; one device serves λ.

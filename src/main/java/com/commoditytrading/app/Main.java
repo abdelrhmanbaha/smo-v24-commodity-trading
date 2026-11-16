@@ -40,20 +40,44 @@ public final class Main {
                 askLong(in, "Random seed", d.seed()));
         System.out.printf(Locale.ROOT, "%nSystem load ρ = %.3f%n", config.load());
 
-        Simulator sim = config.buildSimulator();
         if (automatic) {
-            runAutomatic(sim);
+            runAutomatic(in, config);
         } else {
-            runStepMode(in, sim);
+            runStepMode(in, config.buildSimulator());
         }
     }
 
-    /** Automatic mode: the whole run at once, then the summary tables. */
-    private static void runAutomatic(Simulator sim) {
+    /** Automatic mode: optionally choose N by the formula, then the whole run at once and the summary. */
+    private static void runAutomatic(Scanner in, SimulationConfig config) {
+        String answer = ask(in, "Choose N by the formula? y = yes, n = use N as entered", "y");
+        if (answer.equalsIgnoreCase("y")) {
+            config = chooseRequestCount(config);
+        }
+        Simulator sim = config.buildSimulator();
         sim.run();
         System.out.printf(Locale.ROOT, "%nAutomatic mode: simulation complete at t = %.4f.%n",
                 sim.getCurrentTime());
         System.out.print(SummaryView.render(sim));
+    }
+
+    /** Runs the N search, prints every run and returns the configuration with the chosen N. */
+    private static SimulationConfig chooseRequestCount(SimulationConfig config) {
+        System.out.printf(Locale.ROOT,
+                "%nChoosing N = t²(1 − p)/(p·δ²), t = %.3f, δ = %.1f; stop when p changes by less than %.0f%%%n",
+                RequestCountSelector.T_ALPHA, RequestCountSelector.DELTA, 100 * RequestCountSelector.STOP_CHANGE);
+        System.out.printf(Locale.ROOT, "  %-4s %8s %8s%n", "Run", "N", "p_отк");
+        List<RequestCountSelector.Run> runs = RequestCountSelector.select(config);
+        for (int i = 0; i < runs.size(); i++) {
+            RequestCountSelector.Run run = runs.get(i);
+            System.out.printf(Locale.ROOT, "  %-4d %8d %7.1f%%%n",
+                    i + 1, run.requestLimit(), 100 * run.refusalProbability());
+        }
+        int chosen = runs.get(runs.size() - 1).requestLimit();
+        if (runs.size() == 1) {
+            System.out.println("No change possible (p = 0 or 1), so N stays as entered.");
+        }
+        System.out.printf(Locale.ROOT, "Chosen N = %d%n", chosen);
+        return config.withRequestLimit(chosen);
     }
 
     /** Step mode: the user decides how many events to process at a time. */
