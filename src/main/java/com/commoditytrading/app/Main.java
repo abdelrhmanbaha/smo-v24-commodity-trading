@@ -56,6 +56,7 @@ public final class Main {
         }
         System.out.printf(Locale.ROOT, "%nSimulation complete after %d steps, at t = %.4f.%n",
                 step, sim.getCurrentTime());
+        System.out.print(SummaryView.render(sim));
     }
 
     private static int parsePositive(String text) {
